@@ -19,6 +19,17 @@
 //|  ۳) کالیبراسیونِ آفستِ سرور به TimeTradeServer() تغییر کرد            |
 //|     (RM_SessionTime.mqh) + دو ستونِ تشخیصیِ BoxStart_Server/          |
 //|     BoxEnd_Server در انتهای CSV، برایِ راستی‌آزماییِ مستقیمِ کاربر.     |
+//|                                                                    |
+//| نسخه‌ی ۴ (ClaudeCode_FixList_DayBias_v4، ۱۲ اوت ۲۰۲۶) — تعریفِ باکس:  |
+//|  باکسِ SOB دوسر بسته است: کندلی که open آن == BoxEnd هم عضوِ باکس     |
+//|  است (توکیوِ پیش‌فرض = ۱۳ کندل، نه ۱۲) — طبقِ ریشه‌یابیِ رفتارِ SOB      |
+//|  زنده. BoxLayer.mqh یک پارامترِ inclusiveEnd گرفته (اینجا true برایِ  |
+//|  توکیو/لندن/NY-باکس/سشنِ NY مرجع). پیامدِ لازم: باکس ۵ دقیقه دیرتر    |
+//|  واقعاً بسته می‌شود، پس مرزِ «اولین کندلِ بعد از باکس» (LP) و «لحظه‌ی   |
+//|  رأی» (NY_AtVote) هر دو به BoxEnd+۵دقیقه منتقل شدند. ماشین‌وضعیتِ     |
+//|  LP/NY Edge و فرمولِ DayColor دست‌نخورده‌اند. BoxStart_Server/         |
+//|  BoxEnd_Server همچنان همان لنگرهای نامی (۲۰:۰۰/۲۱:۰۰ NY) را گزارش    |
+//|  می‌کنند.                                                            |
 //+------------------------------------------------------------------+
 #property copyright "RiskManager-EA"
 #property script_show_inputs
@@ -64,7 +75,7 @@ bool FindPrevTradingDayNYSession(string symbol, int daysAgo, SSessionRange &outR
    for(int back = 1; back <= NY_PREV_MAX_LOOKBACK; back++)
    {
       if(BL_ComputeSessionRange(symbol, daysAgo + back, InpNYPrevStartH, InpNYPrevStartM,
-                                 InpNYPrevEndH, InpNYPrevEndM, outRange))
+                                 InpNYPrevEndH, InpNYPrevEndM, true, outRange))
          return(true);
    }
    return(false);
@@ -79,8 +90,13 @@ bool ProcessOneDay(int handle, string symbol, int daysAgo, int &green, int &yell
    SSessionRange tokyoLP, london, nyBox, nyPrev;
 
    // F1: باکسِ LP برای روزِ D = باکسِ توکیوِ شبِ منتهی به D (روزِ تقویمیِ D-1، یعنی daysAgo+1).
-   if(!BL_ComputeSessionRange(symbol, daysAgo + 1, InpTokyoStartH, InpTokyoStartM, InpTokyoEndH, InpTokyoEndM, tokyoLP))
+   // v4: inclusiveEnd=true (باکسِ دوسر بسته - کندلِ open==BoxEnd هم عضوِ باکس است).
+   if(!BL_ComputeSessionRange(symbol, daysAgo + 1, InpTokyoStartH, InpTokyoStartM, InpTokyoEndH, InpTokyoEndM, true, tokyoLP))
       return(false);
+
+   // v4: بسته‌شدنِ واقعیِ باکس؛ چون کندلِ open==tokyoLP.end حالا عضوِ باکس است، آن کندل در
+   // tokyoLP.end + ۵دقیقه بسته می‌شود. مرزِ LP و لحظه‌ی رأیِ NY باید همین لحظه را مبنا بگیرند.
+   datetime tokyoCloseInstant = tokyoLP.end + PeriodSeconds(PERIOD_M5);
 
    // مرزِ پایانِ پنجره = شروعِ باکسِ توکیوِ روزِ بعد (شبِ خودِ D، یعنی همان daysAgo قدیمی).
    // این فقط یک محاسبه‌ی ساعتی است (بدونِ نیاز به کندلِ واقعی آنجا) — طبقِ F1 دقیقاً بندِ پنجره را
@@ -97,22 +113,24 @@ bool ProcessOneDay(int handle, string symbol, int daysAgo, int &green, int &yell
 
    // لندن/باکسِ NY روزِ جاری اختیاری‌اند: فقط ستون‌های خامِ CSV را پر می‌کنند، skip کلِ روز را باعث نمی‌شوند.
    // این‌ها متعلق به روزِ تقویمیِ D خودش‌اند (که در داخلِ پنجره‌ی ارزیابیِ D قرار می‌گیرند).
-   BL_ComputeSessionRange(symbol, daysAgo, InpLondonStartH, InpLondonStartM, InpLondonEndH, InpLondonEndM, london);
-   BL_ComputeSessionRange(symbol, daysAgo, InpNYBoxStartH, InpNYBoxStartM, InpNYBoxEndH, InpNYBoxEndM, nyBox);
+   BL_ComputeSessionRange(symbol, daysAgo, InpLondonStartH, InpLondonStartM, InpLondonEndH, InpLondonEndM, true, london);
+   BL_ComputeSessionRange(symbol, daysAgo, InpNYBoxStartH, InpNYBoxStartM, InpNYBoxEndH, InpNYBoxEndM, true, nyBox);
 
    // نسخه‌ی ۳ (بندِ ۱): پنجره‌ی NY Edge از پایانِ سشنِ NY مرجع شروع می‌شود - عریض‌تر از پنجره‌ی
    // LP (که همچنان از بسته‌شدنِ باکسِ توکیو شروع می‌شود، دست‌نخورده). یک آرایه‌ی عریض می‌گیریم و
    // زیرآرایه‌ی LP را از داخلش برش می‌زنیم تا دو بار CopyRates روی بازه‌ی هم‌پوشان نزنیم.
-   datetime nyWindowStart = nyPrev.end;
+   // v4: چون nyPrev هم دوسر بسته است، سشنِ مرجع واقعاً در nyPrev.end+۵دقیقه تمام می‌شود.
+   datetime nyWindowStart = nyPrev.end + PeriodSeconds(PERIOD_M5);
 
    MqlRates wideRates[];
    int wideN = CopyRates(symbol, PERIOD_M5, nyWindowStart, windowEnd - 1, wideRates);
    if(wideN <= 0) return(false);
    if(wideRates[0].time > wideRates[wideN - 1].time) ArrayReverse(wideRates); // اطمینان از ترتیبِ صعودیِ زمان
 
-   // زیرآرایه‌ی LP: از اولین کندلی که زمانش >= بسته‌شدنِ باکسِ توکیو است.
+   // زیرآرایه‌ی LP: از اولین کندلی که زمانش >= بسته‌شدنِ واقعیِ باکسِ توکیو است (v4: tokyoCloseInstant،
+   // نه tokyoLP.end - وگرنه کندلِ خودِ باکس اشتباهاً «بعد از باکس» حساب می‌شد).
    int lpStartIdx = 0;
-   while(lpStartIdx < wideN && wideRates[lpStartIdx].time < tokyoLP.end) lpStartIdx++;
+   while(lpStartIdx < wideN && wideRates[lpStartIdx].time < tokyoCloseInstant) lpStartIdx++;
    int lpCount = wideN - lpStartIdx;
    if(lpCount <= 0) return(false); // بینِ بسته‌شدنِ باکس و انتهایِ پنجره هیچ کندلی نبود
 
@@ -131,7 +149,7 @@ bool ProcessOneDay(int handle, string symbol, int daysAgo, int &green, int &yell
    SSessionRange fullDay;
    BL_ResetRange(fullDay);
    fullDay.valid = true;
-   fullDay.start = tokyoLP.end; fullDay.end = windowEnd;
+   fullDay.start = tokyoCloseInstant; fullDay.end = windowEnd;
    fullDay.open  = dayRates[0].open; fullDay.close = dayRates[lpCount - 1].close;
    fullDay.high  = dayHigh; fullDay.low = dayLow;
    fullDay.highTime = dayHighTime; fullDay.lowTime = dayLowTime;
@@ -143,7 +161,7 @@ bool ProcessOneDay(int handle, string symbol, int daysAgo, int &green, int &yell
 
    // --- NY Edge: پنجره‌ی عریض (از پایانِ سشنِ NY مرجع)، رأی = لحظه‌ی بسته‌شدنِ باکسِ توکیو ---
    SNYEdgeState nyAtVote, nyEndOfDay;
-   NY_Track(wideRates, wideN, nyPrev.high, nyPrev.low, tokyoLP.end, nyAtVote, nyEndOfDay);
+   NY_Track(wideRates, wideN, nyPrev.high, nyPrev.low, tokyoCloseInstant, nyAtVote, nyEndOfDay);
 
    // --- F4: Assert تعریفِ Break (باید همیشه ساختاراً برقرار باشد؛ نقض = باگ) ---
    double nyRange     = nyPrev.high - nyPrev.low;
