@@ -30,6 +30,18 @@
 //|  LP/NY Edge و فرمولِ DayColor دست‌نخورده‌اند. BoxStart_Server/         |
 //|  BoxEnd_Server همچنان همان لنگرهای نامی (۲۰:۰۰/۲۱:۰۰ NY) را گزارش    |
 //|  می‌کنند.                                                            |
+//|                                                                    |
+//| نسخه‌ی ۵ (ClaudeCode_Spec_DayBias_v5_TokyoBracket، ۱۲ اوت ۲۰۲۶) —     |
+//|  ۱۱ ستونِ صرفاً-مشاهده‌ای برایِ بک‌تستِ استراتژیِ Tokyo Bracket، بعد از  |
+//|  BoxStart_Server/BoxEnd_Server. هیچ ستون/منطقِ موجودی تغییر نکرد -    |
+//|  DetectionLayer.mqh's LP_ComputeBracketMetrics دوباره روی همان       |
+//|  dayRates اسکن می‌کند و leg۱/leg۲ را با همان LP_CheckLeg بازتولید     |
+//|  می‌کند. نکته‌ی مهم برایِ کاربر: ستونِ RetestWithinTokyo با تعریفِ فعلیِ|
+//|  «پایانِ سشنِ توکیو» (=BoxEnd نامی/۲۱:۰۰ NY) ساختاراً همیشه ۰ می‌شود -  |
+//|  چون تشخیصِ LP از BoxEnd+۵دقیقه شروع می‌شود و retest حتماً بعد از یک   |
+//|  کندلِ دیگر است، پس زمانش همیشه > ۲۱:۰۰ خواهد بود. تا روشن‌شدنِ منظورِ  |
+//|  دقیقِ «سشنِ توکیو» (باکسِ ۱ساعته یا یک سشنِ عریض‌ترِ آسیایی)، همین      |
+//|  تعریفِ نامی استفاده شده - به کاربر گزارش شد.                         |
 //+------------------------------------------------------------------+
 #property copyright "RiskManager-EA"
 #property script_show_inputs
@@ -85,7 +97,9 @@ bool FindPrevTradingDayNYSession(string symbol, int daysAgo, SSessionRange &outR
 // یک روزِ معاملاتی (F1: لنگر = باکسِ توکیوِ شبِ قبل) را کامل پردازش می‌کند و در صورتِ موفقیت
 // یک ردیفِ CSV می‌نویسد. false = روز skip شد (بدونِ پوشش تاریخی/بدونِ کندلِ کافی/هنوز کامل نشده).
 //------------------------------------------------------------------
-bool ProcessOneDay(int handle, string symbol, int daysAgo, int &green, int &yellow, int &red, int &assertFailures)
+bool ProcessOneDay(int handle, string symbol, int daysAgo, int &green, int &yellow, int &red, int &assertFailures,
+                   int &v5BreakDays, int &v5ConfirmedDays, int &v5RetestBefore1RCount, double &v5SumMaxDepthConfirmed,
+                   int &v5RawSweepCount, int &v5Trade2StopHitCount)
 {
    SSessionRange tokyoLP, london, nyBox, nyPrev;
 
@@ -193,13 +207,46 @@ bool ProcessOneDay(int handle, string symbol, int daysAgo, int &green, int &yell
 
    // --- R_Day ---
    double boxSize = tokyoLP.high - tokyoLP.low;
+   double rVal = 0;
    string rDayStr = "";
    if(lp.finalDir != 0 && boxSize > 0)
    {
       double edge = (lp.finalDir > 0) ? tokyoLP.high : tokyoLP.low;
-      double rVal = (lp.finalDir > 0) ? (dayHigh - edge) / boxSize : (edge - dayLow) / boxSize;
+      rVal = (lp.finalDir > 0) ? (dayHigh - edge) / boxSize : (edge - dayLow) / boxSize;
       if(rVal < 0) rVal = 0;
       rDayStr = CSV_Num(rVal, 3);
+   }
+
+   // --- نسخه‌ی ۵: ستون‌های Tokyo Bracket ---
+   // «پایانِ سشنِ توکیو» برایِ RetestWithinTokyo: تعریفِ نامیِ فعلی (tokyoLP.end = ۲۱:۰۰ NY)
+   // استفاده شده - طبقِ متنِ سند («طبق همان محاسبه ST_* موجود»). توجه: چون تشخیصِ LP از
+   // BoxEnd+۵دقیقه شروع می‌شود و اولین رتستِ ممکن حداقل یک کندلِ دیگر بعد از آن است، این ستون با
+   // همین تعریف ساختاراً همیشه ۰ خواهد بود - به کاربر گزارش شده، منتظرِ تأییدِ منظورِ واقعیِ او.
+   SBracketMetrics bm;
+   LP_ComputeBracketMetrics(dayRates, lpCount, tokyoLP.high, tokyoLP.low, lp, tokyoLP.end, bm);
+
+   string brReason;
+   if(!BR_AssertConsistency(lp, bm, rVal, brReason))
+   {
+      int y3, m3, d3;
+      ST_GetNYCalendarDate(daysAgo, y3, m3, d3);
+      PrintFormat("DayBias ASSERT FAILED (v5 Tokyo Bracket): Date=%04d-%02d-%02d Label=%s Reason=%s",
+                  y3, m3, d3, lp.label, brReason);
+      assertFailures++;
+      return(false);
+   }
+
+   if(bm.hasData)
+   {
+      v5BreakDays++;
+      if(lp.label != "NoDirection") v5ConfirmedDays++;
+      if(bm.retestBefore1R) v5RetestBefore1RCount++;
+      if(lp.label != "NoDirection") v5SumMaxDepthConfirmed += bm.maxDepthPct;
+      if(bm.rawSweepOccurred)
+      {
+         v5RawSweepCount++;
+         if(bm.trade2StopHit) v5Trade2StopHitCount++;
+      }
    }
 
    int y, m, d;
@@ -219,7 +266,18 @@ bool ProcessOneDay(int handle, string symbol, int daysAgo, int &green, int &yell
       CSV_Range4(tokyoLP, g_digits) + "," + CSV_Range4(london, g_digits) + "," +
       CSV_Range4(nyBox, g_digits) + "," + CSV_Range4(fullDay, g_digits) + "," +
       CSV_Time(dayHighTime) + "," + CSV_Time(dayLowTime) + "," +
-      CSV_TimeSec(tokyoLP.start) + "," + CSV_TimeSec(tokyoLP.end);
+      CSV_TimeSec(tokyoLP.start) + "," + CSV_TimeSec(tokyoLP.end) + "," +
+      (bm.hasData ? CSV_Num(bm.breakCloseOvershoot, g_digits) : "") + "," +
+      (bm.hasData ? CSV_Time(bm.retestTime) : "") + "," +
+      (bm.hasData ? CSV_Bool(bm.retestBefore1R) : "") + "," +
+      (bm.hasData ? CSV_Bool(bm.retestWithinTokyo) : "") + "," +
+      (bm.hasData ? CSV_Num(bm.maxDepthPct, 2) : "") + "," +
+      (bm.hasData ? CSV_Bool(bm.rawSweepOccurred) : "") + "," +
+      ((bm.hasData && bm.rawSweepOccurred) ? CSV_Num(bm.trade2MaxR, 3) : "") + "," +
+      ((bm.hasData && bm.rawSweepOccurred) ? CSV_Bool(bm.trade2StopHit) : "") + "," +
+      (bm.hasData ? CSV_Time(bm.reach1RTime) : "") + "," +
+      (bm.hasData ? CSV_Time(bm.maxDepthTime) : "") + "," +
+      (bm.hasData ? CSV_Time(bm.depth50Time) : "");
 
    FileWriteString(handle, row + "\r\n");
    return(true);
@@ -259,9 +317,15 @@ void OnStart()
    int colorGreen = 0, colorYellow = 0, colorRed = 0;
    int assertFailures = 0;
 
+   // نسخه‌ی ۵، تستِ پذیرشِ ۴: sanity توزیعی برایِ مرورِ انسانی قبل از تحویلِ CSV.
+   int v5BreakDays = 0, v5ConfirmedDays = 0, v5RetestBefore1RCount = 0, v5RawSweepCount = 0, v5Trade2StopHitCount = 0;
+   double v5SumMaxDepthConfirmed = 0;
+
    for(int daysAgo = maxDaysAgo; daysAgo >= 1; daysAgo--)
    {
-      if(ProcessOneDay(handle, symbol, daysAgo, colorGreen, colorYellow, colorRed, assertFailures))
+      if(ProcessOneDay(handle, symbol, daysAgo, colorGreen, colorYellow, colorRed, assertFailures,
+                       v5BreakDays, v5ConfirmedDays, v5RetestBefore1RCount, v5SumMaxDepthConfirmed,
+                       v5RawSweepCount, v5Trade2StopHitCount))
          processed++;
       else
          skipped++;
@@ -279,4 +343,14 @@ void OnStart()
    Print("Symbol: ", symbol, "   Output: ", InpOutputFile);
    Print("Processed days: ", processed, "   Skipped days: ", skipped, "   Assert failures: ", assertFailures);
    Print("DayColor distribution -> Green: ", colorGreen, "  Yellow: ", colorYellow, "  Red: ", colorRed);
+
+   PrintFormat("=== Tokyo Bracket (v5) Sanity ===");
+   PrintFormat("Days with a first break: %d (of which %d confirmed = not NoDirection)", v5BreakDays, v5ConfirmedDays);
+   if(v5BreakDays > 0)
+      PrintFormat("Retest-before-1R rate: %.1f%% (%d/%d)", 100.0 * v5RetestBefore1RCount / v5BreakDays, v5RetestBefore1RCount, v5BreakDays);
+   if(v5ConfirmedDays > 0)
+      PrintFormat("Avg MaxDepthIntoBox_Before1R_Pct on confirmed days: %.1f%%", v5SumMaxDepthConfirmed / v5ConfirmedDays);
+   PrintFormat("Raw sweep occurred: %d days", v5RawSweepCount);
+   if(v5RawSweepCount > 0)
+      PrintFormat("Trade2_StopHit rate: %.1f%% (%d/%d)", 100.0 * v5Trade2StopHitCount / v5RawSweepCount, v5Trade2StopHitCount, v5RawSweepCount);
 }

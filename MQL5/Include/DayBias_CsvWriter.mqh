@@ -55,12 +55,17 @@ string CSV_Range4(const SSessionRange &r, int digits)
 // جهتِ نهاییِ قفل‌شده به ۱R (چه مستقیم چه بعدِ سوییپ)؛ خودِ LP_FlipTime دیگر با آن مخلوط نمی‌شود.
 // نسخه‌ی ۳ (بندِ ۳): دو ستونِ تشخیصیِ BoxStart_Server/BoxEnd_Server در انتها اضافه شد — زمانِ
 // سرورِ MT5 که واقعاً برایِ باکسِ توکیویِ LP استفاده شد، تا کاربر بتواند مستقیماً روی چارت چک کند.
+// نسخه‌ی ۵ (ClaudeCode_Spec_DayBias_v5_TokyoBracket.md): ۱۱ ستونِ صرفاً-مشاهده‌ای برایِ بک‌تستِ
+// استراتژیِ کاندیدِ Tokyo Bracket، بعد از BoxStart_Server/BoxEnd_Server. هیچ ستونِ موجودی تغییر نکرد.
 const string CSV_HEADER =
    "Date,BoxHigh,BoxLow,BoxSize,LP_FirstBreak_Dir,LP_FirstBreak_Time,LP_FirstBreak_BodyRatio,"
    "LP_Reached1R,LP_Label,LP_FlipTime,LP_1R_Time,NY_PrevHigh,NY_PrevLow,NY_PrevRange,NY_AtVote,"
    "NY_AtVote_PenetrationDepth$,NY_AtVote_PenetrationPct,NY_EndOfDay,NY_BreakTime,DayColor,R_Day,"
    "Tokyo_Open,Tokyo_High,Tokyo_Low,Tokyo_Close,London_Open,London_High,London_Low,London_Close,"
    "NY_Open,NY_High,NY_Low,NY_Close,FullDay_Open,FullDay_High,FullDay_Low,FullDay_Close,"
-   "DayHigh_Time,DayLow_Time,BoxStart_Server,BoxEnd_Server";
+   "DayHigh_Time,DayLow_Time,BoxStart_Server,BoxEnd_Server,"
+   "BreakClose_Overshoot$,RetestTouch_Time,RetestTouch_Before1R,RetestWithinTokyo,"
+   "MaxDepthIntoBox_Before1R_Pct,RawSweepOccurred,Trade2_MaxR,Trade2_StopHit,"
+   "Reach1R_Time,MaxDepth_Time,Depth50_Time";
 
 #endif // DAYBIAS_CSVWRITER_MQH

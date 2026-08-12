@@ -315,4 +315,166 @@ string DL_ComputeDayColor(const SLPResult &lp, const SNYEdgeState &nyAtVote)
    return(lp.firstDir == nyDir ? "Green" : "Red");
 }
 
+//------------------------------------------------------------------
+// نسخه‌ی ۵ (ClaudeCode_Spec_DayBias_v5_TokyoBracket.md) — ستون‌های صرفاً-مشاهده‌ای برایِ
+// بک‌تستِ استراتژیِ کاندیدِ «Tokyo Bracket». هیچ اثری روی LP_Detect/DL_ComputeDayColor/assertهایِ
+// موجود ندارد؛ فقط دوباره روی همان rates (بعد از یک شکستِ معتبر) اسکن می‌کند و leg۱/leg۲ را با
+// همان LP_CheckLeg موجود (بدونِ تغییر در خودش) بازتولید می‌کند تا با ماشین‌وضعیتِ اصلی هم‌راستا بماند.
+//------------------------------------------------------------------
+struct SBracketMetrics
+{
+   bool     hasData;              // false اگر lp.hasBreak==false (همه‌ی مقادیرِ زیر بی‌معنی‌اند)
+   double   breakCloseOvershoot;  // $ - همیشه >= 0
+   datetime retestTime;           // اولین لمسِ مجددِ لبه بعد از کلوزِ کندلِ شکست؛ ۰=هرگز
+   bool     retestBefore1R;
+   bool     retestWithinTokyo;
+   double   maxDepthPct;          // بیشینه‌ی نفوذِ به داخلِ باکس، ٪ ارتفاعِ باکس (>۱۰۰ یعنی سوییپ)
+   datetime maxDepthTime;         // ۰ اگر maxDepthPct<=0
+   bool     rawSweepOccurred;     // عبور از لبه‌ی مقابل قبل از ۱R (مستقل از این‌که لیبلِ نهایی Sweep_* شد یا نه)
+   double   trade2MaxR;           // فقط معنادار اگر rawSweepOccurred
+   bool     trade2StopHit;        // فقط معنادار اگر rawSweepOccurred
+   datetime reach1RTime;          // ۱R برایِ ترید ۱ (جهتِ اول)؛ ۰ اگر نرسید (شاملِ روزهایِ سوییپ - آنجا ترید۱ استاپ خورده)
+   datetime depth50Time;          // اولین لحظه‌ی نفوذِ >=۵۰٪ در همان بازه‌ی «قبل از ۱R»؛ ۰ اگر هرگز
+};
+
+void BR_ResetMetrics(SBracketMetrics &m)
+{
+   m.hasData = false;
+   m.breakCloseOvershoot = 0;
+   m.retestTime = 0; m.retestBefore1R = false; m.retestWithinTokyo = false;
+   m.maxDepthPct = 0; m.maxDepthTime = 0;
+   m.rawSweepOccurred = false;
+   m.trade2MaxR = 0; m.trade2StopHit = false;
+   m.reach1RTime = 0;
+   m.depth50Time = 0;
+}
+
+// rates/count/boxHigh/boxLow/lp: همان‌هایی که به LP_Detect داده شد و از آن برگشت (بدونِ تغییر).
+// tokyoSessionEnd: مرزِ «پایانِ سشنِ توکیو» برایِ RetestWithinTokyo (نگاه کن به کامنتِ فراخوانی در
+// DataScript.mq5 - این نقطه‌یِ ابهامِ سندِ v5 است که هنوز با کاربر تأیید نشده).
+void LP_ComputeBracketMetrics(const MqlRates &rates[], int count, double boxHigh, double boxLow,
+                               const SLPResult &lp, datetime tokyoSessionEnd, SBracketMetrics &out)
+{
+   BR_ResetMetrics(out);
+   if(!lp.hasBreak) return;
+   out.hasData = true;
+
+   int breakIdx = LP_FindBarIndex(rates, count, lp.firstTime);
+   if(breakIdx < 0) return; // نباید رخ دهد؛ گاردِ دفاعی محض
+
+   int dir = lp.firstDir;
+   double boxSize = boxHigh - boxLow;
+   double edge    = (dir > 0) ? boxHigh : boxLow;
+   double oppEdge = (dir > 0) ? boxLow  : boxHigh;
+   double target1 = edge + dir * boxSize;
+
+   out.breakCloseOvershoot = MathAbs(rates[breakIdx].close - edge);
+
+   // گاردِ دفاعی: boxSize<=0 (باکسِ تخت، عملاً هرگز با دیتایِ واقعی رخ نمی‌دهد) یعنی درصدهایِ
+   // نفوذ/R تعریف‌نشده‌اند (تقسیم بر صفر) — مثلِ گاردِ boxSize>0 که R_Day هم در DataScript.mq5 دارد.
+   if(boxSize <= 0) return;
+
+   // ۱) بازتولیدِ leg۱ (همان LP_CheckLeg موجود، بدونِ تغییر) فقط برایِ Reach1R_Time — این باید مستقل
+   //    از سرنوشتِ leg۲ باشد، چون «ترید ۱» دقیقاً با اولین برخورد به oppEdge استاپ می‌خورد (تعریفِ Sweep).
+   datetime sweepTime1 = 0, targetTime1 = 0;
+   int leg1 = LP_CheckLeg(rates, count, breakIdx, dir, target1, oppEdge, sweepTime1, targetTime1);
+   if(leg1 == 1) out.reach1RTime = targetTime1;
+   out.rawSweepOccurred = (leg1 == 0);
+
+   // ۲) اسکنِ retest + عمقِ نفوذ: از اولین کندلِ *بعد از* کندلِ شکست (breakIdx+1)، طبقِ تعریفِ
+   //    مرزیِ v5 («از کلوزِ کندلِ شکست»، نه از بازشدنش). retest در کلِ باقی‌ماندهِ روز جستجو می‌شود
+   //    (مستقل از ۱R/سوییپ)؛ عمقِ نفوذ فقط تا لحظه‌ی سوییپ/۱R (هرکدام زودتر) دنبال می‌شود.
+   bool depthTrackingOpen = true;
+   for(int i = breakIdx + 1; i < count; i++)
+   {
+      bool touchesEdge = (dir > 0) ? (rates[i].low <= edge) : (rates[i].high >= edge);
+      if(touchesEdge && out.retestTime == 0)
+      {
+         out.retestTime = rates[i].time;
+         // تساوی هم‌زمان با Reach1R_Time (همان کندل): محافظه‌کارانه «قبل/هم‌زمان» حساب می‌شود، چون
+         // ترتیبِ درون‌کندلی از OHLC اثبات‌پذیر نیست (همان اصلِ پذیرفته‌شده‌ی LP_CheckLeg).
+         out.retestBefore1R = (out.reach1RTime == 0) || (rates[i].time <= out.reach1RTime);
+         out.retestWithinTokyo = (rates[i].time < tokyoSessionEnd);
+      }
+
+      if(depthTrackingOpen)
+      {
+         bool sweepHitHere  = (dir > 0) ? (rates[i].low  <= oppEdge) : (rates[i].high >= oppEdge);
+         bool targetHitHere = (dir > 0) ? (rates[i].high >= target1) : (rates[i].low  <= target1);
+         double depthCandle = (dir > 0) ? (edge - rates[i].low) / boxSize * 100.0
+                                         : (rates[i].high - edge) / boxSize * 100.0;
+
+         if(sweepHitHere)
+         {
+            if(depthCandle > out.maxDepthPct) { out.maxDepthPct = depthCandle; out.maxDepthTime = rates[i].time; }
+            if(out.maxDepthPct >= 50.0 && out.depth50Time == 0) out.depth50Time = rates[i].time;
+            depthTrackingOpen = false; // پنجره‌ی «قبل از ۱R» اینجا با سوییپ تمام شد
+         }
+         else if(targetHitHere)
+         {
+            depthTrackingOpen = false; // ۱R رسید؛ خودِ این کندل داخلِ پنجره‌ی «قبل از ۱R» حساب نمی‌شود
+         }
+         else if(depthCandle > 0)
+         {
+            if(depthCandle > out.maxDepthPct) { out.maxDepthPct = depthCandle; out.maxDepthTime = rates[i].time; }
+            if(out.maxDepthPct >= 50.0 && out.depth50Time == 0) out.depth50Time = rates[i].time;
+         }
+      }
+   }
+
+   // ۳) اگر سوییپِ خام رخ داد، «ترید ۲» (ورود در لبه‌ی مقابل، استاپ = لبه‌ی اول) را بازتولید کن —
+   //    خامِ بدونِ شرطِ ۱R (طبقِ سندِ v5، برخلافِ لیبلِ Sweep_* که فقط >=۱R را قبول می‌کند).
+   if(out.rawSweepOccurred)
+   {
+      int dir2       = -dir;
+      double edge2    = oppEdge;
+      double target2  = edge2 + dir2 * boxSize;
+      double oppEdge2 = edge;
+      int flipIdx = LP_FindBarIndex(rates, count, sweepTime1);
+      if(flipIdx >= 0)
+      {
+         double maxR = 0;
+         for(int i = flipIdx; i < count; i++)
+         {
+            double rNow = (dir2 > 0) ? (rates[i].high - edge2) / boxSize : (edge2 - rates[i].low) / boxSize;
+            if(rNow > maxR) maxR = rNow;
+         }
+         out.trade2MaxR = maxR;
+
+         datetime dummySweep2 = 0, targetTime2 = 0;
+         int leg2 = LP_CheckLeg(rates, count, flipIdx, dir2, target2, oppEdge2, dummySweep2, targetTime2);
+         out.trade2StopHit = (leg2 == 0);
+      }
+   }
+}
+
+// نسخه‌ی ۵، بندِ ۴.۲ — پنج ناوردایِ سازگاریِ داخلی که سندِ v5 به‌صراحت خواسته assert شوند.
+// rDayVal = همان مقدارِ R_Day که DataScript.mq5 برایِ این روز محاسبه کرده (۰ اگر NoDirection).
+bool BR_AssertConsistency(const SLPResult &lp, const SBracketMetrics &bm, double rDayVal, string &outReason)
+{
+   if(!bm.hasData) return(true);
+
+   bool isSweepLabel = (StringSubstr(lp.label, 0, 6) == "Sweep_");
+
+   if(isSweepLabel && !(bm.rawSweepOccurred && bm.maxDepthPct > 100.0))
+   { outReason = "Sweep_* label but RawSweepOccurred/MaxDepthIntoBox_Before1R_Pct inconsistent"; return(false); }
+
+   if(lp.hasBreak && lp.reached1R && bm.maxDepthPct > 100.0)
+   { outReason = "LP_Reached1R=1 without sweep but MaxDepthIntoBox_Before1R_Pct>100"; return(false); }
+
+   if(bm.retestBefore1R && (bm.retestTime == 0 || (bm.reach1RTime != 0 && bm.retestTime > bm.reach1RTime)))
+   { outReason = "RetestTouch_Before1R=1 but timing inconsistent"; return(false); }
+
+   if(bm.rawSweepOccurred && bm.trade2MaxR >= 1.0 && isSweepLabel && rDayVal < bm.trade2MaxR - 0.001)
+   { outReason = "Trade2_MaxR>=1 with Sweep_* label but R_Day inconsistent"; return(false); }
+
+   if(bm.depth50Time != 0 && bm.maxDepthPct < 50.0)
+   { outReason = "Depth50_Time set but MaxDepthIntoBox_Before1R_Pct<50"; return(false); }
+
+   if((bm.maxDepthTime != 0) != (bm.maxDepthPct > 0.0))
+   { outReason = "MaxDepth_Time / MaxDepthIntoBox_Before1R_Pct presence mismatch"; return(false); }
+
+   return(true);
+}
+
 #endif // DAYBIAS_DETECTIONLAYER_MQH
