@@ -33,6 +33,16 @@ input int InpServerUtcOffsetMin = 99999;   // Server->UTC offset (min); 99999 = 
 #define ST_GV_TICK_KEY   "RM_SrvUtcOffsetTick"
 
 //+------------------------------------------------------------------+
+//| پورتِ MT5: TimeYear/TimeMonth/TimeDay/TimeDayOfWeek فقط در MQL4     |
+//| وجود دارند؛ در MQL5 معادلِ آن‌ها از طریقِ MqlDateTime ساخته می‌شود.   |
+//| الگوریتمِ فراخوانی‌کننده‌ها دست‌نخورده می‌ماند.                        |
+//+------------------------------------------------------------------+
+int ST_TimeYear(datetime t)      { MqlDateTime s; TimeToStruct(t, s); return(s.year); }
+int ST_TimeMonth(datetime t)     { MqlDateTime s; TimeToStruct(t, s); return(s.mon); }
+int ST_TimeDay(datetime t)       { MqlDateTime s; TimeToStruct(t, s); return(s.day); }
+int ST_TimeDayOfWeek(datetime t) { MqlDateTime s; TimeToStruct(t, s); return((int)s.day_of_week); }
+
+//+------------------------------------------------------------------+
 //| قاعده‌ی رسمیِ US DST — یکسان در هر سه پیاده‌سازیِ قبلی (تأیید‌شده).    |
 //| شروع: دومین یکشنبه‌ی مارس 07:00 UTC | پایان: اولین یکشنبه‌ی نوامبر    |
 //| 06:00 UTC. utcTime باید دور از خودِ لبه‌ی نیمه‌شب باشد (ورودی معمولاً |
@@ -40,15 +50,15 @@ input int InpServerUtcOffsetMin = 99999;   // Server->UTC offset (min); 99999 = 
 //+------------------------------------------------------------------+
 bool ST_IsUSDST(datetime utcTime)
 {
-   int y = TimeYear(utcTime);
+   int y = ST_TimeYear(utcTime);
    datetime marchFirst = StringToTime(IntegerToString(y) + ".03.01 00:00");
-   int dowM = TimeDayOfWeek(marchFirst);              // 0=Sunday..6=Saturday
+   int dowM = ST_TimeDayOfWeek(marchFirst);           // 0=Sunday..6=Saturday
    int firstSunM  = (dowM == 0) ? 1 : (8 - dowM);     // اولین یکشنبه‌ی مارس
    int secondSunM = firstSunM + 7;                    // دومین یکشنبه‌ی مارس
    datetime dstStart = StringToTime(IntegerToString(y) + ".03." + IntegerToString(secondSunM) + " 07:00");
 
    datetime novFirst = StringToTime(IntegerToString(y) + ".11.01 00:00");
-   int dowN = TimeDayOfWeek(novFirst);
+   int dowN = ST_TimeDayOfWeek(novFirst);
    int firstSunN  = (dowN == 0) ? 1 : (8 - dowN);     // اولین یکشنبه‌ی نوامبر
    datetime dstEnd = StringToTime(IntegerToString(y) + ".11." + IntegerToString(firstSunN) + " 06:00");
 
@@ -69,9 +79,9 @@ void ST_GetNYCalendarDate(int daysAgo, int &y, int &m, int &d)
    int  nowNyOffSec = nowDst ? (-4 * 3600) : (-5 * 3600);
    datetime nowNY   = nowUTC + nowNyOffSec;
    datetime targetNY = nowNY - ((datetime)daysAgo) * 86400;
-   y = TimeYear(targetNY);
-   m = TimeMonth(targetNY);
-   d = TimeDay(targetNY);
+   y = ST_TimeYear(targetNY);
+   m = ST_TimeMonth(targetNY);
+   d = ST_TimeDay(targetNY);
 }
 
 //+------------------------------------------------------------------+
