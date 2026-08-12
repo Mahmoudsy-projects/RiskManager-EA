@@ -41,9 +41,11 @@ string CSV_Range4(const SSessionRange &r, int digits)
           CSV_Num(r.low, digits)  + "," + CSV_Num(r.close, digits));
 }
 
+// نسخه‌ی ۲ (F6): یک ستونِ جدیدِ اختیاری LP_1R_Time بعد از LP_FlipTime اضافه شد — زمانِ رسیدنِ
+// جهتِ نهاییِ قفل‌شده به ۱R (چه مستقیم چه بعدِ سوییپ)؛ خودِ LP_FlipTime دیگر با آن مخلوط نمی‌شود.
 const string CSV_HEADER =
    "Date,BoxHigh,BoxLow,BoxSize,LP_FirstBreak_Dir,LP_FirstBreak_Time,LP_FirstBreak_BodyRatio,"
-   "LP_Reached1R,LP_Label,LP_FlipTime,NY_PrevHigh,NY_PrevLow,NY_PrevRange,NY_AtVote,"
+   "LP_Reached1R,LP_Label,LP_FlipTime,LP_1R_Time,NY_PrevHigh,NY_PrevLow,NY_PrevRange,NY_AtVote,"
    "NY_AtVote_PenetrationDepth$,NY_AtVote_PenetrationPct,NY_EndOfDay,NY_BreakTime,DayColor,R_Day,"
    "Tokyo_Open,Tokyo_High,Tokyo_Low,Tokyo_Close,London_Open,London_High,London_Low,London_Close,"
    "NY_Open,NY_High,NY_Low,NY_Close,FullDay_Open,FullDay_High,FullDay_Low,FullDay_Close,"

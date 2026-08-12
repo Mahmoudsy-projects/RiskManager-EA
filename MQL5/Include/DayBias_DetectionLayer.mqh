@@ -1,8 +1,10 @@
 //+------------------------------------------------------------------+
 //|                                     DayBias_DetectionLayer.mqh   |
 //| لایه‌ی تشخیص Day Bias — طبق «تعریف‌های مکانیکی فریزشده» (بخش ۳ سندِ  |
-//| دستورکار): LP (باکس توکیو)، NY Edge (سشن NY روز قبل)، رنگ روز.       |
-//| همه‌ی محاسبات روی M5.                                                |
+//| دستورکار) + اصلاحاتِ نسخه‌ی ۲ (ClaudeCode_Fixes_v2_DayBias، ۱۲ اوت   |
+//| ۲۰۲۶): LP (باکس توکیو)، NY Edge (سشن NY روزِ معاملاتیِ قبل)، رنگ روز. |
+//| همه‌ی محاسبات روی M5. پنجره‌ی روزِ ورودی (rates) را DataScript.mq5    |
+//| طبقِ F1 می‌سازد: از بسته‌شدنِ باکسِ توکیویِ D تا شروعِ باکسِ روزِ بعد.    |
 //+------------------------------------------------------------------+
 #ifndef DAYBIAS_DETECTIONLAYER_MQH
 #define DAYBIAS_DETECTIONLAYER_MQH
@@ -10,7 +12,7 @@
 #include "DayBias_BoxLayer.mqh"
 
 //------------------------------------------------------------------
-// LP — بخش ۳.۱
+// LP — بخش ۳.۱ (+ F6/F7 نسخه‌ی ۲)
 //------------------------------------------------------------------
 struct SLPResult
 {
@@ -19,16 +21,18 @@ struct SLPResult
    datetime firstTime;
    double   firstBodyRatio;
    bool     reached1R;        // جهتِ اول پیش از سوییپ به ۱R رسید
-   datetime flipTime;         // زمانِ سوییپ (۰ اگر سوییپ رخ نداده)
+   datetime flipTime;         // زمانِ سوییپِ تأییدشده (F6: فقط وقتی لیبلِ نهایی Sweep_* باشد؛ وگرنه ۰)
+   datetime oneRTime;         // F6: زمانِ رسیدن به ۱R برایِ جهتِ نهاییِ قفل‌شده (چه مستقیم چه بعدِ سوییپ)؛ ۰ اگر هرگز نرسید
    string   label;            // Buy / Sell / Sweep_Buy / Sweep_Sell / NoDirection
    int      finalDir;         // جهتِ نهاییِ لیبل (برای R_Day)، ۰ اگر NoDirection
 };
 
 // بررسیِ یک «leg»: آیا جهتِ dir از startIdx تا پایانِ آرایه، قبل از عبور از oppEdge
-// به target می‌رسد؟  1=رسید به target، 0=سوییپ شد (oppEdge لمس/عبور شد)، -1=هیچ‌کدام تا پایانِ روز.
-// اگر یک کندل هم‌زمان هر دو شرط را داشته باشد، محافظه‌کارانه سوییپ در نظر گرفته می‌شود
-// (نمی‌توان ترتیبِ درون‌کندلی را از OHLC اثبات کرد).
-int LP_CheckLeg(const MqlRates &rates[], int count, int startIdx, int dir, double target, double oppEdge, datetime &eventTime)
+// به target می‌رسد؟  1=رسید به target (targetTime ست می‌شود)، 0=سوییپ شد (sweepTime ست می‌شود)،
+// -1=هیچ‌کدام تا پایانِ روز. اگر یک کندل هم‌زمان هر دو شرط را داشته باشد، محافظه‌کارانه سوییپ در
+// نظر گرفته می‌شود (نمی‌توان ترتیبِ درون‌کندلی را از OHLC اثبات کرد) — طبقِ F7.
+int LP_CheckLeg(const MqlRates &rates[], int count, int startIdx, int dir, double target, double oppEdge,
+                datetime &sweepTime, datetime &targetTime)
 {
    for(int i = startIdx; i < count; i++)
    {
@@ -43,8 +47,8 @@ int LP_CheckLeg(const MqlRates &rates[], int count, int startIdx, int dir, doubl
          sweepHit  = (rates[i].high >= oppEdge);
          targetHit = (rates[i].low  <= target);
       }
-      if(sweepHit)  { eventTime = rates[i].time; return(0); }
-      if(targetHit) { eventTime = rates[i].time; return(1); }
+      if(sweepHit)  { sweepTime  = rates[i].time; return(0); }
+      if(targetHit) { targetTime = rates[i].time; return(1); }
    }
    return(-1);
 }
@@ -56,11 +60,12 @@ int LP_FindBarIndex(const MqlRates &rates[], int count, datetime t)
    return(-1);
 }
 
-// rates باید از اولین کندلِ بعد از بسته‌شدنِ باکسِ توکیو تا پایانِ روز باشد (ترتیبِ صعودی).
+// rates باید از اولین کندلِ بعد از بسته‌شدنِ باکسِ توکیو تا پایانِ پنجره‌ی روزِ معاملاتی
+// (F1: تا شروعِ باکسِ روزِ معاملاتیِ بعد) باشد — ترتیبِ صعودی.
 void LP_Detect(const MqlRates &rates[], int count, double boxHigh, double boxLow, SLPResult &out)
 {
    out.hasBreak = false; out.firstDir = 0; out.firstTime = 0; out.firstBodyRatio = 0;
-   out.reached1R = false; out.flipTime = 0; out.label = "NoDirection"; out.finalDir = 0;
+   out.reached1R = false; out.flipTime = 0; out.oneRTime = 0; out.label = "NoDirection"; out.finalDir = 0;
 
    double boxSize = boxHigh - boxLow;
    int breakIdx = -1;
@@ -95,38 +100,44 @@ void LP_Detect(const MqlRates &rates[], int count, double boxHigh, double boxLow
    double target1   = edge1 + out.firstDir * boxSize;
    double oppEdge1  = (out.firstDir > 0) ? boxLow : boxHigh;
 
-   int leg1 = LP_CheckLeg(rates, count, breakIdx, out.firstDir, target1, oppEdge1, out.flipTime);
+   datetime sweepTime1 = 0, targetTime1 = 0;
+   int leg1 = LP_CheckLeg(rates, count, breakIdx, out.firstDir, target1, oppEdge1, sweepTime1, targetTime1);
 
    if(leg1 == 1)
    {
       out.reached1R = true;
       out.label = (out.firstDir > 0) ? "Buy" : "Sell";
       out.finalDir = out.firstDir;
+      out.oneRTime = targetTime1;
       return;
    }
 
    if(leg1 != 0)
-      return; // نه ۱R نه سوییپ تا پایانِ روز -> NoDirection (out.flipTime هرگز ست نشد)
+      return; // نه ۱R نه سوییپ تا پایانِ پنجره -> NoDirection (flipTime/oneRTime هرگز ست نشدند)
 
    // سوییپ رخ داد؛ جهتِ دوم از لبه‌ی مقابل با همان قانون سنجیده می‌شود (حداکثر یک فلیپ در روز).
+   // توجه (F6/تستِ پذیرشِ ۵): flipTime فقط در صورتِ تأییدِ نهاییِ Sweep_* commit می‌شود؛ یک سوییپِ
+   // خام که جهتِ دوم هم به ۱R نرسد، NoDirection می‌ماند و flipTime خالی می‌ماند.
    int dir2        = -out.firstDir;
    double edge2     = oppEdge1;
    double target2   = edge2 + dir2 * boxSize;
    double oppEdge2  = edge1;
-   datetime dummyFlip = 0;
-   int flipIdx = LP_FindBarIndex(rates, count, out.flipTime);
-   int leg2 = (flipIdx >= 0) ? LP_CheckLeg(rates, count, flipIdx, dir2, target2, oppEdge2, dummyFlip) : -1;
+   datetime dummySweep2 = 0, targetTime2 = 0;
+   int flipIdx = LP_FindBarIndex(rates, count, sweepTime1);
+   int leg2 = (flipIdx >= 0) ? LP_CheckLeg(rates, count, flipIdx, dir2, target2, oppEdge2, dummySweep2, targetTime2) : -1;
 
    if(leg2 == 1)
    {
+      out.flipTime = sweepTime1;
       out.label = (dir2 > 0) ? "Sweep_Buy" : "Sweep_Sell";
       out.finalDir = dir2;
+      out.oneRTime = targetTime2;
    }
-   // leg2 == 0 (برگشت به لبه‌ی اول) یا -1 (هیچ‌کدام تا پایانِ روز) -> NoDirection (پیش‌فرض)
+   // leg2 == 0 (برگشت به لبه‌ی اول) یا -1 (هیچ‌کدام تا پایانِ پنجره) -> NoDirection (پیش‌فرض)
 }
 
 //------------------------------------------------------------------
-// NY Edge — بخش ۳.۲
+// NY Edge — بخش ۳.۲ (+ F3 نسخه‌ی ۲: اسکن فقط از لحظه‌ی رأی، PreExisting)
 //------------------------------------------------------------------
 struct SNYEdgeState
 {
@@ -134,8 +145,11 @@ struct SNYEdgeState
    int      breakDir;      // +1/-1
    datetime breakTime;
    int      sweepDir;      // آخرین سوییپِ تأییدشده (اگر broken نشده باشد)، وگرنه بی‌اثر
-   double   maxPenHigh;     // بیشینه‌ی نفوذِ بالای لبه‌ی بالا تا این لحظه ($)
-   double   maxPenLow;      // بیشینه‌ی نفوذِ زیرِ لبه‌ی پایین تا این لحظه ($)
+   bool     preExisting;    // F3: در لحظه‌ی شروعِ اسکن (بسته‌شدنِ باکس) قیمت از قبل فراتر از آستانه بود
+   int      preExistingDir;
+   double   penDepth;       // عمقِ نفوذِ ($) مربوط به وضعیتِ فعلی (Break/Sweep/PreExisting)؛ ۰ برای Silent
+   double   maxPenHigh;     // داخلی: بیشینه‌ی نفوذِ در حالِ انتظارِ بالای لبه‌ی بالا (برایِ تشخیصِ سوییپ)
+   double   maxPenLow;      // داخلی: بیشینه‌ی نفوذِ در حالِ انتظارِ زیرِ لبه‌ی پایین
    bool     pendingHigh;    // نفوذِ بالا رخ داده و هنوز با یک کندلِ کامل تأیید نشده
    bool     pendingLow;
 };
@@ -144,22 +158,37 @@ void NY_ResetState(SNYEdgeState &s)
 {
    s.broken = false; s.breakDir = 0; s.breakTime = 0;
    s.sweepDir = 0;
+   s.preExisting = false; s.preExistingDir = 0;
+   s.penDepth = 0;
    s.maxPenHigh = 0; s.maxPenLow = 0;
    s.pendingHigh = false; s.pendingLow = false;
 }
 
 string NY_StatusLabel(const SNYEdgeState &s)
 {
+   if(s.preExisting) return(s.preExistingDir > 0 ? "PreExisting_Buy" : "PreExisting_Sell");
    if(s.broken) return(s.breakDir > 0 ? "Break_Buy" : "Break_Sell");
    if(s.sweepDir != 0) return(s.sweepDir > 0 ? "Sweep_Buy" : "Sweep_Sell");
    return("Silent");
 }
 
-// rates باید کل روز را از نیمه‌شبِ نیویورک تا پایانِ روز پوشش دهد (ترتیبِ صعودی).
-// voteMoment = زمانِ بسته‌شدنِ باکسِ توکیو؛ atVote = وضعیت تا آخرینِ کندلی که پیش از این
-// لحظه بسته شده (کندل‌های با open time >= voteMoment در رأی لحاظ نمی‌شوند).
+// جهتِ +1/-1/۰ از یک وضعیتِ NY — برایِ مقایسه‌ی رنگِ روز (F5)، مستقل از این‌که وضعیت
+// Break/Sweep/PreExisting باشد.
+int NY_StateDir(const SNYEdgeState &s)
+{
+   if(s.preExisting) return(s.preExistingDir);
+   if(s.broken) return(s.breakDir);
+   return(s.sweepDir);
+}
+
+// rates باید دقیقاً پنجره‌ی ارزیابیِ روزِ معاملاتی را پوشش دهد (F1: از بسته‌شدنِ باکسِ توکیویِ D
+// تا شروعِ باکسِ روزِ بعد) — ترتیبِ صعودی. هیچ کندلی قبل از این پنجره نباید به rates داده شود
+// (F3: منعِ نشتِ رویدادهای پیش از لحظه‌ی رأی).
+// voteClosePrice = کلوزِ آخرین کندلِ باکسِ توکیو (یعنی قیمت درست در لحظه‌ی بسته‌شدنِ باکس/رأی).
+// F3: اگر در همان لحظه قیمت از قبل فراتر از آستانه‌ی ۲۳٪ باشد -> PreExisting_X (نه Break)،
+// و اسکنِ رویدادمحور برایِ Break/Sweep اصلاً شروع نمی‌شود (قبلاً تعیین‌تکلیف شده).
 void NY_Track(const MqlRates &rates[], int count, double prevHigh, double prevLow,
-              datetime voteMoment, SNYEdgeState &atVote, SNYEdgeState &endOfDay)
+              double voteClosePrice, SNYEdgeState &atVote, SNYEdgeState &endOfDay)
 {
    double range      = prevHigh - prevLow;
    double threshHigh = prevHigh + 0.23 * range;
@@ -167,77 +196,94 @@ void NY_Track(const MqlRates &rates[], int count, double prevHigh, double prevLo
 
    SNYEdgeState state;
    NY_ResetState(state);
-   NY_ResetState(atVote);
-   bool voteCaptured = false;
+
+   if(voteClosePrice > threshHigh)
+   {
+      state.preExisting = true; state.preExistingDir = 1;
+      state.penDepth = voteClosePrice - prevHigh;
+   }
+   else if(voteClosePrice < threshLow)
+   {
+      state.preExisting = true; state.preExistingDir = -1;
+      state.penDepth = prevLow - voteClosePrice;
+   }
+
+   // لحظه‌ی رأی = همین لحظه (شروعِ پنجره/بسته‌شدنِ باکس)؛ هیچ کندلی هنوز پردازش نشده.
+   atVote = state;
 
    for(int i = 0; i < count; i++)
    {
-      if(!voteCaptured && rates[i].time >= voteMoment)
-      {
-         atVote = state;
-         voteCaptured = true;
-      }
+      if(state.broken || state.preExisting)
+         break; // وضعیت قفل شده؛ رویدادهای بعدی بی‌اثرند (طبقِ تعریف: برگشتِ بعدی لیبل را عوض نمی‌کند)
 
-      if(!state.broken)
+      if(rates[i].close > threshHigh)
       {
-         if(rates[i].close > threshHigh)
+         state.broken = true; state.breakDir = 1; state.breakTime = rates[i].time;
+         state.penDepth = rates[i].close - prevHigh;
+      }
+      else if(rates[i].close < threshLow)
+      {
+         state.broken = true; state.breakDir = -1; state.breakTime = rates[i].time;
+         state.penDepth = prevLow - rates[i].close;
+      }
+      else
+      {
+         if(rates[i].high > prevHigh)
          {
-            state.broken = true; state.breakDir = 1; state.breakTime = rates[i].time;
+            double pen = rates[i].high - prevHigh;
+            if(pen > state.maxPenHigh) state.maxPenHigh = pen;
+            state.pendingHigh = true;
          }
-         else if(rates[i].close < threshLow)
+         if(rates[i].low < prevLow)
          {
-            state.broken = true; state.breakDir = -1; state.breakTime = rates[i].time;
+            double pen = prevLow - rates[i].low;
+            if(pen > state.maxPenLow) state.maxPenLow = pen;
+            state.pendingLow = true;
          }
-         else
+         bool fullyInside = (rates[i].high <= prevHigh && rates[i].low >= prevLow);
+         if(fullyInside)
          {
-            if(rates[i].high > prevHigh)
-            {
-               double pen = rates[i].high - prevHigh;
-               if(pen > state.maxPenHigh) state.maxPenHigh = pen;
-               state.pendingHigh = true;
-            }
-            if(rates[i].low < prevLow)
-            {
-               double pen = prevLow - rates[i].low;
-               if(pen > state.maxPenLow) state.maxPenLow = pen;
-               state.pendingLow = true;
-            }
-            bool fullyInside = (rates[i].high <= prevHigh && rates[i].low >= prevLow);
-            if(fullyInside)
-            {
-               if(state.pendingHigh) { state.sweepDir = -1; state.pendingHigh = false; }
-               if(state.pendingLow)  { state.sweepDir = 1;  state.pendingLow  = false; }
-            }
+            if(state.pendingHigh) { state.sweepDir = -1; state.penDepth = state.maxPenHigh; state.pendingHigh = false; }
+            if(state.pendingLow)  { state.sweepDir = 1;  state.penDepth = state.maxPenLow;  state.pendingLow  = false; }
          }
       }
    }
 
-   if(!voteCaptured) atVote = state; // لحظه‌ی رأی بعد از آخرین کندلِ روز بود (نباید معمولاً رخ دهد)
    endOfDay = state;
 }
 
 //------------------------------------------------------------------
-// رنگ روز — بخش ۳.۳
+// F4 — Assert تعریفِ Break: هر لیبلی که با "Break" شروع شود باید نفوذش >= ۲۳٪ باشد.
+// می‌بایست همیشه به‌صورتِ ساختاری برقرار باشد (thresh = prevEdge ± 23%×range و close از آن
+// عبور کرده)؛ نقض = باگِ واقعی، نه دادهٔ مرزی.
+//------------------------------------------------------------------
+bool DL_AssertBreakPenetration(string nyLabel, double penPct)
+{
+   if(StringSubstr(nyLabel, 0, 5) == "Break")
+      return(penPct >= 23.0 - 0.001);
+   return(true);
+}
+
+//------------------------------------------------------------------
+// رنگ روز — بخش ۳.۳ (F5 نسخه‌ی ۲: فرمولِ مصوب، بدونِ حالتِ ویژه‌ی «هنوز شکستی نداشته»)
 //
-// نکته‌ی تفسیری (چون متنِ سند در این نقطه دو مبنای زمانیِ متفاوت را ترکیب می‌کند):
-// «رأیِ LP در لحظه‌ی رأی» را به‌صورت رویدادمحور می‌خوانیم (D1، هر زمان از روز که رخ دهد)،
-// نه ساعت‌محور مثلِ NY_AtVote؛ چون خودِ شکستِ LP طبق تعریف حتماً *بعد* از بسته‌شدنِ باکسِ
-// توکیو رخ می‌دهد. «LP=Sweep» یعنی رویدادِ سوییپ در طولِ روز رخ داده (flipTime ست شده)،
-// صرف‌نظر از این‌که جهتِ دوم نهایتاً به Sweep_X برسد یا به NoDirection سقوط کند.
-// موردی که سند صریحاً پوشش نداده: وقتی LP هنوز هیچ شکستی نداشته (NoDirection بدونِ سوییپ)
-// -> اینجا مثلِ Silent، زرد در نظر گرفته شده (سیگنالِ ناکافی، نه تضاد). این تفسیر باید با
-// تستِ راستی‌آزمایی دستیِ بخشِ ۶ (به‌خصوص کیسِ ۱۱ اوت ۲۰۲۶) چک/تأیید شود.
+// if LP_FirstBreak وجود ندارد یا LP در لحظه رأی Sweep شده (لیبلِ نهایی Sweep_*) -> Red
+// elif NY_AtVote == Silent -> Yellow
+// elif جهتِ LP_FirstBreak == جهتِ NY_AtVote -> Green
+// else -> Red
+//
+// توجه: رأیِ LP رویدادمحور است (اولین شکستِ معتبر، هر زمان از پنجره‌ی روز که رخ دهد)، نه
+// ساعت‌محور مثلِ NY_AtVote — چون خودِ شکستِ LP طبق تعریف حتماً *بعد* از بسته‌شدنِ باکسِ توکیو
+// رخ می‌دهد، درحالی‌که رأیِ NY دقیقاً در لحظه‌ی بسته‌شدنِ باکس سنجیده می‌شود.
 //------------------------------------------------------------------
 string DL_ComputeDayColor(const SLPResult &lp, const SNYEdgeState &nyAtVote)
 {
-   if(lp.flipTime != 0) return("Red");                                   // LP سوییپ شد
+   if(!lp.hasBreak || lp.flipTime != 0) return("Red");   // شکستی نداشته، یا سوییپِ تأییدشده
 
-   bool nySilent = (!nyAtVote.broken && nyAtVote.sweepDir == 0);
-   if(nySilent) return("Yellow");                                        // NY_AtVote = Silent
+   string nyLabel = NY_StatusLabel(nyAtVote);
+   if(nyLabel == "Silent") return("Yellow");
 
-   if(lp.firstDir == 0) return("Yellow");                                // LP هنوز شکستی نداشته تا این لحظه
-
-   int nyDir = nyAtVote.broken ? nyAtVote.breakDir : nyAtVote.sweepDir;
+   int nyDir = NY_StateDir(nyAtVote);
    return(lp.firstDir == nyDir ? "Green" : "Red");
 }
 
