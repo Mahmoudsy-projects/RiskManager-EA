@@ -19,7 +19,7 @@ struct SSessionRange
 {
    bool     valid;
    datetime start;      // به وقتِ سرور، شاملِ خودش
-   datetime end;         // به وقتِ سرور، خارج از بازه (half-open)
+   datetime end;         // لنگرِ پایانِ سشن به وقتِ سرور؛ شاملِ بودن/نبودنِ کندلِ open==end به inclusiveEnd بستگی دارد
    double   open;
    double   high;
    double   low;
@@ -47,11 +47,19 @@ bool BL_HasHistoryCoverage(string symbol, datetime winStart)
    return(winStart >= firstDate);
 }
 
-// محاسبه‌ی OHLC یک پنجره‌ی سشن (server time [start,end)) از کندل‌های M5.
+// محاسبه‌ی OHLC یک پنجره‌ی سشن از کندل‌های M5.
+// inclusiveEnd=true → بازه‌ی دوسر بسته [start,end] (تعریفِ v4 برای باکس‌های SOB: کندلی که
+//   open آن == end هم عضوِ باکس است — طبقِ ریشه‌یابیِ رفتارِ SOB زنده، تأییدشده با ۱۳ کندلِ
+//   باکسِ توکیو). inclusiveEnd=false → بازه‌ی نیم‌بازِ [start,end) — برایِ پنجره‌هایی که end
+//   لنگرِ سشنِ *بعدی* است، نه خودِ باکس (این پروژه دیگر از این حالت استفاده نمی‌کند چون
+//   FullDay دیگر با BL_ComputeSessionRange ساخته نمی‌شود؛ برایِ استفاده‌ی عمومی نگه داشته شده).
+// outRange.start/end همیشه همان لنگرهای محاسبه‌شده‌ی سشن‌اند؛ inclusiveEnd فقط تعیین می‌کند
+// کدام کندل‌ها در High/Low/Open/Close شرکت کنند، نه این‌که چه چیزی گزارش شود.
 // false برمی‌گرداند اگر: پوشش تاریخی نباشد، پنجره هنوز کامل نشده باشد (روزِ جاری)،
 // یا هیچ کندلی در بازه نباشد (تعطیلی/شنبه).
 bool BL_ComputeSessionRange(string symbol, int daysAgo,
                              int nyStartH, int nyStartM, int nyEndH, int nyEndM,
+                             bool inclusiveEnd,
                              SSessionRange &outRange)
 {
    BL_ResetRange(outRange);
@@ -62,11 +70,15 @@ bool BL_ComputeSessionRange(string symbol, int daysAgo,
    if(!BL_HasHistoryCoverage(symbol, start))
       return(false);
 
-   if(!ST_IsClosedServerTime(end))
+   // اگر کندلِ open==end هم عضوِ باکس است، آن کندل واقعاً در end+M5 بسته می‌شود؛ گاردِ
+   // «روزِ جاریِ ناقص» باید همان لحظه را چک کند، نه end را.
+   datetime lastCandleCloses = inclusiveEnd ? (end + PeriodSeconds(PERIOD_M5)) : end;
+   if(!ST_IsClosedServerTime(lastCandleCloses))
       return(false);
 
+   datetime copyEnd = inclusiveEnd ? end : (end - 1);
    MqlRates rates[];
-   int copied = CopyRates(symbol, PERIOD_M5, start, end - 1, rates);
+   int copied = CopyRates(symbol, PERIOD_M5, start, copyEnd, rates);
    if(copied <= 0)
       return(false);
 
