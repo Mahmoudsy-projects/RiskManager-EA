@@ -42,6 +42,13 @@
 //|  کندلِ دیگر است، پس زمانش همیشه > ۲۱:۰۰ خواهد بود. تا روشن‌شدنِ منظورِ  |
 //|  دقیقِ «سشنِ توکیو» (باکسِ ۱ساعته یا یک سشنِ عریض‌ترِ آسیایی)، همین      |
 //|  تعریفِ نامی استفاده شده - به کاربر گزارش شد.                         |
+//|                                                                    |
+//| نسخه‌ی ۵.۱ (ClaudeCode_FixList_DayBias_v5_1، ۱۲ اوت ۲۰۲۶) — بندِ ۱:    |
+//|  یک Assert فیل‌شده دیگر کلِ اجرا را متوقف نمی‌کند: آن روز رد می‌شود     |
+//|  (بدونِ ردیفِ CSV؛ لاگِ کاملِ تاریخ+مقادیر همچنان در Journal چاپ        |
+//|  می‌شود)، حلقه تا آخرِ تاریخچه ادامه می‌یابد، و در خلاصه‌ی پایانی لیستِ   |
+//|  تاریخ‌هایِ رد‌شده چاپ می‌شود. بندِ ۲ (باگِ RetestWithinTokyo) هنوز حل   |
+//|  نشده - منتظرِ تأییدِ کاربر رویِ تعریفِ دقیقِ مرزِ «پایانِ سشنِ توکیو».     |
 //+------------------------------------------------------------------+
 #property copyright "RiskManager-EA"
 #property script_show_inputs
@@ -99,7 +106,7 @@ bool FindPrevTradingDayNYSession(string symbol, int daysAgo, SSessionRange &outR
 //------------------------------------------------------------------
 bool ProcessOneDay(int handle, string symbol, int daysAgo, int &green, int &yellow, int &red, int &assertFailures,
                    int &v5BreakDays, int &v5ConfirmedDays, int &v5RetestBefore1RCount, double &v5SumMaxDepthConfirmed,
-                   int &v5RawSweepCount, int &v5Trade2StopHitCount)
+                   int &v5RawSweepCount, int &v5Trade2StopHitCount, string &failedDates)
 {
    SSessionRange tokyoLP, london, nyBox, nyPrev;
 
@@ -198,6 +205,7 @@ bool ProcessOneDay(int handle, string symbol, int daysAgo, int &green, int &yell
                   nyEndOfDayLabel, endOfDayPct, CSV_TimeSec(nyEndOfDay.breakTime),
                   CSV_TimeSec(nyWindowStart), CSV_TimeSec(windowEnd));
       assertFailures++;
+      failedDates += (StringLen(failedDates) > 0 ? "," : "") + StringFormat("%04d-%02d-%02d", y2, m2, d2);
       return(false);
    }
 
@@ -233,6 +241,7 @@ bool ProcessOneDay(int handle, string symbol, int daysAgo, int &green, int &yell
       PrintFormat("DayBias ASSERT FAILED (v5 Tokyo Bracket): Date=%04d-%02d-%02d Label=%s Reason=%s",
                   y3, m3, d3, lp.label, brReason);
       assertFailures++;
+      failedDates += (StringLen(failedDates) > 0 ? "," : "") + StringFormat("%04d-%02d-%02d", y3, m3, d3);
       return(false);
    }
 
@@ -316,25 +325,22 @@ void OnStart()
    int processed = 0, skipped = 0;
    int colorGreen = 0, colorYellow = 0, colorRed = 0;
    int assertFailures = 0;
+   string failedDates = "";
 
    // نسخه‌ی ۵، تستِ پذیرشِ ۴: sanity توزیعی برایِ مرورِ انسانی قبل از تحویلِ CSV.
    int v5BreakDays = 0, v5ConfirmedDays = 0, v5RetestBefore1RCount = 0, v5RawSweepCount = 0, v5Trade2StopHitCount = 0;
    double v5SumMaxDepthConfirmed = 0;
 
+   // v5.1: یک Assert فیل‌شده دیگر کلِ اجرا را متوقف نمی‌کند — فقط همان روز رد می‌شود (لاگِ کامل
+   // بالای این خلاصه چاپ شده) و حلقه تا آخرِ تاریخچه ادامه می‌یابد.
    for(int daysAgo = maxDaysAgo; daysAgo >= 1; daysAgo--)
    {
       if(ProcessOneDay(handle, symbol, daysAgo, colorGreen, colorYellow, colorRed, assertFailures,
                        v5BreakDays, v5ConfirmedDays, v5RetestBefore1RCount, v5SumMaxDepthConfirmed,
-                       v5RawSweepCount, v5Trade2StopHitCount))
+                       v5RawSweepCount, v5Trade2StopHitCount, failedDates))
          processed++;
       else
          skipped++;
-
-      if(assertFailures > 0)
-      {
-         Print("DayBias: متوقف شد چون یک Assert فیل کرد — خروجی تا این نقطه معتبر است اما ناقص. لاگِ بالا را برایِ جزئیاتِ روزِ خطادار ببین.");
-         break;
-      }
    }
 
    FileClose(handle);
@@ -342,6 +348,8 @@ void OnStart()
    Print("=== DayBias History Export Complete ===");
    Print("Symbol: ", symbol, "   Output: ", InpOutputFile);
    Print("Processed days: ", processed, "   Skipped days: ", skipped, "   Assert failures: ", assertFailures);
+   if(assertFailures > 0)
+      PrintFormat("%d روز با خطای Assert رد شدند (بدونِ ردیفِ CSV، جزئیات در لاگِ بالا): %s", assertFailures, failedDates);
    Print("DayColor distribution -> Green: ", colorGreen, "  Yellow: ", colorYellow, "  Red: ", colorRed);
 
    PrintFormat("=== Tokyo Bracket (v5) Sanity ===");
