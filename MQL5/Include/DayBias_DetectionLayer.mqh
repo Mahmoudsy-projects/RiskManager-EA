@@ -181,14 +181,17 @@ int NY_StateDir(const SNYEdgeState &s)
    return(s.sweepDir);
 }
 
-// rates باید دقیقاً پنجره‌ی ارزیابیِ روزِ معاملاتی را پوشش دهد (F1: از بسته‌شدنِ باکسِ توکیویِ D
-// تا شروعِ باکسِ روزِ بعد) — ترتیبِ صعودی. هیچ کندلی قبل از این پنجره نباید به rates داده شود
-// (F3: منعِ نشتِ رویدادهای پیش از لحظه‌ی رأی).
-// voteClosePrice = کلوزِ آخرین کندلِ باکسِ توکیو (یعنی قیمت درست در لحظه‌ی بسته‌شدنِ باکس/رأی).
-// F3: اگر در همان لحظه قیمت از قبل فراتر از آستانه‌ی ۲۳٪ باشد -> PreExisting_X (نه Break)،
-// و اسکنِ رویدادمحور برایِ Break/Sweep اصلاً شروع نمی‌شود (قبلاً تعیین‌تکلیف شده).
+// نسخه‌ی ۳ (ClaudeCode_FixList_DayBias_v3.md، بندِ ۱): rates باید پنجره‌ی *کاملِ* ارزیابیِ
+// NY Edge را پوشش دهد — از پایانِ سشنِ NY مرجع (نه از بسته‌شدنِ باکسِ توکیو؛ آن مرز بیش‌ازحد
+// دیر بود و باعث می‌شد NY_AtVote همیشه Silent باشد) تا انتهایِ پنجره‌ی روزِ D — ترتیبِ صعودی.
+// voteMoment = لحظه‌ی بسته‌شدنِ باکسِ توکیویِ D (جدا از شروعِ این آرایه). دو خروجی:
+//   atVote    = عکسِ فوریِ ماشین‌وضعیت درست قبل از پردازشِ اولین کندلی که زمانش >= voteMoment است.
+//   endOfDay  = وضعیتِ نهایی بعد از پردازشِ کاملِ آرایه.
+// PreExisting فقط اگر قیمت در همان لحظه‌یِ *شروعِ این آرایه* (پایانِ سشنِ NY مرجع) از قبل
+// فراتر از آستانه باشد (نادر - گپِ آخرِ هفته)؛ در غیرِ این‌صورت اسکنِ رویدادمحورِ Break/Sweep
+// از همان کندلِ اول شروع می‌شود.
 void NY_Track(const MqlRates &rates[], int count, double prevHigh, double prevLow,
-              double voteClosePrice, SNYEdgeState &atVote, SNYEdgeState &endOfDay)
+              datetime voteMoment, SNYEdgeState &atVote, SNYEdgeState &endOfDay)
 {
    double range      = prevHigh - prevLow;
    double threshHigh = prevHigh + 0.23 * range;
@@ -197,24 +200,34 @@ void NY_Track(const MqlRates &rates[], int count, double prevHigh, double prevLo
    SNYEdgeState state;
    NY_ResetState(state);
 
-   if(voteClosePrice > threshHigh)
+   if(count > 0)
    {
-      state.preExisting = true; state.preExistingDir = 1;
-      state.penDepth = voteClosePrice - prevHigh;
-   }
-   else if(voteClosePrice < threshLow)
-   {
-      state.preExisting = true; state.preExistingDir = -1;
-      state.penDepth = prevLow - voteClosePrice;
+      double startPrice = rates[0].open; // قیمتِ دقیقاً در لحظه‌ی شروعِ پنجره (پایانِ سشنِ NY مرجع)
+      if(startPrice > threshHigh)
+      {
+         state.preExisting = true; state.preExistingDir = 1;
+         state.penDepth = startPrice - prevHigh;
+      }
+      else if(startPrice < threshLow)
+      {
+         state.preExisting = true; state.preExistingDir = -1;
+         state.penDepth = prevLow - startPrice;
+      }
    }
 
-   // لحظه‌ی رأی = همین لحظه (شروعِ پنجره/بسته‌شدنِ باکس)؛ هیچ کندلی هنوز پردازش نشده.
-   atVote = state;
+   bool voteCaptured = false;
+   if(state.preExisting) { atVote = state; voteCaptured = true; } // از همان لحظه‌ی صفر تعیین‌تکلیف شده
 
    for(int i = 0; i < count; i++)
    {
+      if(!voteCaptured && rates[i].time >= voteMoment)
+      {
+         atVote = state; // عکسِ فوری درست قبل از این کندل - رویدادِ خودِ این کندل هنوز لحاظ نشده
+         voteCaptured = true;
+      }
+
       if(state.broken || state.preExisting)
-         break; // وضعیت قفل شده؛ رویدادهای بعدی بی‌اثرند (طبقِ تعریف: برگشتِ بعدی لیبل را عوض نمی‌کند)
+         continue; // وضعیت قفل شده؛ رویدادهای بعدی بی‌اثرند - اما اسکن ادامه می‌یابد تا atVote درست‌جا capture شود
 
       if(rates[i].close > threshHigh)
       {
@@ -249,6 +262,7 @@ void NY_Track(const MqlRates &rates[], int count, double prevHigh, double prevLo
       }
    }
 
+   if(!voteCaptured) atVote = state; // voteMoment بعد از آخرین کندلِ آرایه بود (نباید معمولاً رخ دهد)
    endOfDay = state;
 }
 
@@ -262,6 +276,14 @@ bool DL_AssertBreakPenetration(string nyLabel, double penPct)
    if(StringSubstr(nyLabel, 0, 5) == "Break")
       return(penPct >= 23.0 - 0.001);
    return(true);
+}
+
+// نسخه‌ی ۳ (بندِ ۱، آخرین بولت): هر NY_BreakTime باید داخلِ پنجره‌ی ارزیابیِ NY Edge باشد
+// (>= پایانِ سشنِ NY مرجع، < انتهایِ پنجره‌ی روزِ D). breakTime==0 یعنی بریکی رخ نداده، معتبر است.
+bool DL_AssertBreakTimeInWindow(datetime breakTime, datetime windowStart, datetime windowEnd)
+{
+   if(breakTime == 0) return(true);
+   return(breakTime >= windowStart && breakTime < windowEnd);
 }
 
 //------------------------------------------------------------------
@@ -278,7 +300,13 @@ bool DL_AssertBreakPenetration(string nyLabel, double penPct)
 //------------------------------------------------------------------
 string DL_ComputeDayColor(const SLPResult &lp, const SNYEdgeState &nyAtVote)
 {
-   if(!lp.hasBreak || lp.flipTime != 0) return("Red");   // شکستی نداشته، یا سوییپِ تأییدشده
+   // نسخه‌ی ۳ (ClaudeCode_FixList_DayBias_v3.md، بندِ ۲): تثبیتِ رسمی — روزی که تا لحظه‌ی
+   // رأی هیچ کندلِ M5 شرطِ شکستِ معتبرِ باکس را پاس نکرده (LP_FirstBreak_Dir خالی، lp.hasBreak
+   // == false) همیشه Red است؛ حالتِ ویژه‌ی جداگانه (مثلاً Yellow) ندارد.
+   if(!lp.hasBreak) return("Red");
+
+   // LP سوییپِ تأییدشده داشته (لیبلِ نهایی Sweep_*) -> هم Red.
+   if(lp.flipTime != 0) return("Red");
 
    string nyLabel = NY_StatusLabel(nyAtVote);
    if(nyLabel == "Silent") return("Yellow");

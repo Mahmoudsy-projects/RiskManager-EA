@@ -23,6 +23,16 @@ string CSV_Time(datetime t)
    return(StringFormat("%04d-%02d-%02d %02d:%02d", s.year, s.mon, s.day, s.hour, s.min));
 }
 
+// مثلِ CSV_Time اما با ثانیه — برایِ ستون‌های تشخیصیِ BoxStart_Server/BoxEnd_Server (نسخه‌ی ۳،
+// بندِ ۳) که هدفشان دقیقاً کشفِ جیترِ زیرِ-دقیقه‌ای در محاسبه‌ی آفستِ سرور است.
+string CSV_TimeSec(datetime t)
+{
+   if(t == 0) return("");
+   MqlDateTime s;
+   TimeToStruct(t, s);
+   return(StringFormat("%04d-%02d-%02d %02d:%02d:%02d", s.year, s.mon, s.day, s.hour, s.min, s.sec));
+}
+
 string CSV_Dir(int dir)
 {
    if(dir > 0) return("Buy");
@@ -43,12 +53,14 @@ string CSV_Range4(const SSessionRange &r, int digits)
 
 // نسخه‌ی ۲ (F6): یک ستونِ جدیدِ اختیاری LP_1R_Time بعد از LP_FlipTime اضافه شد — زمانِ رسیدنِ
 // جهتِ نهاییِ قفل‌شده به ۱R (چه مستقیم چه بعدِ سوییپ)؛ خودِ LP_FlipTime دیگر با آن مخلوط نمی‌شود.
+// نسخه‌ی ۳ (بندِ ۳): دو ستونِ تشخیصیِ BoxStart_Server/BoxEnd_Server در انتها اضافه شد — زمانِ
+// سرورِ MT5 که واقعاً برایِ باکسِ توکیویِ LP استفاده شد، تا کاربر بتواند مستقیماً روی چارت چک کند.
 const string CSV_HEADER =
    "Date,BoxHigh,BoxLow,BoxSize,LP_FirstBreak_Dir,LP_FirstBreak_Time,LP_FirstBreak_BodyRatio,"
    "LP_Reached1R,LP_Label,LP_FlipTime,LP_1R_Time,NY_PrevHigh,NY_PrevLow,NY_PrevRange,NY_AtVote,"
    "NY_AtVote_PenetrationDepth$,NY_AtVote_PenetrationPct,NY_EndOfDay,NY_BreakTime,DayColor,R_Day,"
    "Tokyo_Open,Tokyo_High,Tokyo_Low,Tokyo_Close,London_Open,London_High,London_Low,London_Close,"
    "NY_Open,NY_High,NY_Low,NY_Close,FullDay_Open,FullDay_High,FullDay_Low,FullDay_Close,"
-   "DayHigh_Time,DayLow_Time";
+   "DayHigh_Time,DayLow_Time,BoxStart_Server,BoxEnd_Server";
 
 #endif // DAYBIAS_CSVWRITER_MQH
