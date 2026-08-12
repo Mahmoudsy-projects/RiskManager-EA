@@ -43,12 +43,25 @@
 //|  دقیقِ «سشنِ توکیو» (باکسِ ۱ساعته یا یک سشنِ عریض‌ترِ آسیایی)، همین      |
 //|  تعریفِ نامی استفاده شده - به کاربر گزارش شد.                         |
 //|                                                                    |
-//| نسخه‌ی ۵.۱ (ClaudeCode_FixList_DayBias_v5_1، ۱۲ اوت ۲۰۲۶) — بندِ ۱:    |
-//|  یک Assert فیل‌شده دیگر کلِ اجرا را متوقف نمی‌کند: آن روز رد می‌شود     |
-//|  (بدونِ ردیفِ CSV؛ لاگِ کاملِ تاریخ+مقادیر همچنان در Journal چاپ        |
+//| نسخه‌ی ۵.۱ (ClaudeCode_FixList_DayBias_v5_1، ۱۲ اوت ۲۰۲۶):            |
+//|  بندِ ۱: یک Assert فیل‌شده دیگر کلِ اجرا را متوقف نمی‌کند: آن روز رد     |
+//|  می‌شود (بدونِ ردیفِ CSV؛ لاگِ کاملِ تاریخ+مقادیر همچنان در Journal چاپ  |
 //|  می‌شود)، حلقه تا آخرِ تاریخچه ادامه می‌یابد، و در خلاصه‌ی پایانی لیستِ   |
-//|  تاریخ‌هایِ رد‌شده چاپ می‌شود. بندِ ۲ (باگِ RetestWithinTokyo) هنوز حل   |
-//|  نشده - منتظرِ تأییدِ کاربر رویِ تعریفِ دقیقِ مرزِ «پایانِ سشنِ توکیو».     |
+//|  تاریخ‌هایِ رد‌شده چاپ می‌شود.                                          |
+//|  بندِ ۲: RetestWithinTokyo حالا با پایانِ *سشنِ کاملِ* توکیو (۰۵:۰۰ NY،  |
+//|  طبقِ تأییدِ کاربر - نه باکسِ SOB یک‌ساعته) مقایسه می‌شود؛ ورودیِ جدیدِ    |
+//|  InpTokyoSessionEndH/M اضافه شد.                                    |
+//|  ریشه‌یابیِ Assertِ فیل‌شده در ۲۰۲۶-۰۴-۲۴ (لیبلِ Sweep_Sell): کندلِ      |
+//|  شکست خودش هم‌زمان لبه‌ی مقابل را هم لمس کرده (کندلِ بسیار پرنوسانِ روزِ |
+//|  بعدِ باکسِ ۵۹.۱۶$) - leg۱ (که از خودِ کندلِ شکست شروع می‌شود) این را     |
+//|  سوییپ حساب می‌کند، اما حلقه‌ی عمقِ DetectionLayer.mqh از کندلِ *بعدی*   |
+//|  شروع می‌شود (طبقِ تعریفِ صریحِ سند) و آن کندل را هرگز نمی‌دید -          |
+//|  MaxDepthIntoBox_Before1R_Pct صفر می‌ماند درحالی‌که RawSweepOccurred=1  |
+//|  بود. فیکس: عمقِ خودِ کندلِ سوییپ/۱R اگر هم‌زمان با کندلِ شکست باشد،      |
+//|  مستقیماً از OHLCش لحاظ می‌شود (LP_ComputeBracketMetrics). آستانه‌ی      |
+//|  Assertِ Sweep_* هم از >۱۰۰٪ دقیق به >=۱۰۰٪ (با تلورانسِ ۰.۰۰۱، مثلِ    |
+//|  Assertِ F4) تغییر کرد - لمسِ دقیقاً روی لبه (بدونِ آورشوت) هم طبقِ      |
+//|  تعریفِ مکانیکیِ Sweep («حتی شدو») یک سوییپِ معتبر است.                  |
 //+------------------------------------------------------------------+
 #property copyright "RiskManager-EA"
 #property script_show_inputs
@@ -62,6 +75,9 @@ input string InpSymbol     = "XAUUSD";                    // نماد (خالی 
 input string InpOutputFile = "DayBias_History_XAUUSD.csv"; // در MQL5/Files/
 
 input int InpTokyoStartH  = 20, InpTokyoStartM = 0,  InpTokyoEndH = 21, InpTokyoEndM = 0;  // باکسِ توکیو (LP)
+// v5.1 (بندِ ۲): پایانِ سشنِ *کاملِ* توکیو (نه باکسِ SOB یک‌ساعته) — طبقِ تأییدِ کاربر، ۰۵:۰۰ به وقتِ
+// نیویورک (صبحِ روزِ D). فقط برایِ ستونِ RetestWithinTokyo استفاده می‌شود؛ روی باکس/LP/رنگِ روز اثر ندارد.
+input int InpTokyoSessionEndH = 5, InpTokyoSessionEndM = 0;  // پایانِ سشنِ کاملِ توکیو (برایِ RetestWithinTokyo)
 input int InpLondonStartH = 3,  InpLondonStartM = 0,  InpLondonEndH = 4,  InpLondonEndM = 0;  // باکسِ لندن (فقط لاگِ خام)
 input int InpNYBoxStartH  = 8,  InpNYBoxStartM = 30, InpNYBoxEndH = 9,  InpNYBoxEndM = 30; // باکسِ NY روزِ جاری (فقط لاگِ خام)
 input int InpNYPrevStartH = 9,  InpNYPrevStartM = 0,  InpNYPrevEndH = 18, InpNYPrevEndM = 0; // سشنِ کاملِ NY روزِ معاملاتیِ قبل (NY Edge)
@@ -226,12 +242,16 @@ bool ProcessOneDay(int handle, string symbol, int daysAgo, int &green, int &yell
    }
 
    // --- نسخه‌ی ۵: ستون‌های Tokyo Bracket ---
-   // «پایانِ سشنِ توکیو» برایِ RetestWithinTokyo: تعریفِ نامیِ فعلی (tokyoLP.end = ۲۱:۰۰ NY)
-   // استفاده شده - طبقِ متنِ سند («طبق همان محاسبه ST_* موجود»). توجه: چون تشخیصِ LP از
-   // BoxEnd+۵دقیقه شروع می‌شود و اولین رتستِ ممکن حداقل یک کندلِ دیگر بعد از آن است، این ستون با
-   // همین تعریف ساختاراً همیشه ۰ خواهد بود - به کاربر گزارش شده، منتظرِ تأییدِ منظورِ واقعیِ او.
+   // v5.1 (بندِ ۲، حل‌شده): «پایانِ سشنِ توکیو» برایِ RetestWithinTokyo دیگر باکسِ SOB یک‌ساعته
+   // (tokyoLP.end = ۲۱:۰۰ NY) نیست - طبقِ تأییدِ کاربر، سشنِ کاملِ توکیو تا ۰۵:۰۰ به وقتِ نیویورکِ
+   // صبحِ روزِ D ادامه دارد. با مرزِ قدیم این ستون ساختاراً همیشه ۰ بود (retest حتماً بعد از
+   // BoxEnd+۵دقیقه است)؛ با مرزِ جدید معنادار می‌شود.
+   datetime tokyoSessionStartUnused, tokyoSessionEnd;
+   ST_ComputeSessionByDaysAgo(daysAgo + 1, InpTokyoStartH, InpTokyoStartM, InpTokyoSessionEndH, InpTokyoSessionEndM,
+                               tokyoSessionStartUnused, tokyoSessionEnd);
+
    SBracketMetrics bm;
-   LP_ComputeBracketMetrics(dayRates, lpCount, tokyoLP.high, tokyoLP.low, lp, tokyoLP.end, bm);
+   LP_ComputeBracketMetrics(dayRates, lpCount, tokyoLP.high, tokyoLP.low, lp, tokyoSessionEnd, bm);
 
    string brReason;
    if(!BR_AssertConsistency(lp, bm, rVal, brReason))

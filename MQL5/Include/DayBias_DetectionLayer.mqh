@@ -350,8 +350,8 @@ void BR_ResetMetrics(SBracketMetrics &m)
 }
 
 // rates/count/boxHigh/boxLow/lp: همان‌هایی که به LP_Detect داده شد و از آن برگشت (بدونِ تغییر).
-// tokyoSessionEnd: مرزِ «پایانِ سشنِ توکیو» برایِ RetestWithinTokyo (نگاه کن به کامنتِ فراخوانی در
-// DataScript.mq5 - این نقطه‌یِ ابهامِ سندِ v5 است که هنوز با کاربر تأیید نشده).
+// tokyoSessionEnd: مرزِ «پایانِ سشنِ کاملِ توکیو» برایِ RetestWithinTokyo - v5.1: ۰۵:۰۰ به وقتِ
+// نیویورک (تأییدشده با کاربر)، نه باکسِ SOB یک‌ساعته؛ نگاه کن به DataScript.mq5.
 void LP_ComputeBracketMetrics(const MqlRates &rates[], int count, double boxHigh, double boxLow,
                                const SLPResult &lp, datetime tokyoSessionEnd, SBracketMetrics &out)
 {
@@ -385,6 +385,25 @@ void LP_ComputeBracketMetrics(const MqlRates &rates[], int count, double boxHigh
    //    مرزیِ v5 («از کلوزِ کندلِ شکست»، نه از بازشدنش). retest در کلِ باقی‌ماندهِ روز جستجو می‌شود
    //    (مستقل از ۱R/سوییپ)؛ عمقِ نفوذ فقط تا لحظه‌ی سوییپ/۱R (هرکدام زودتر) دنبال می‌شود.
    bool depthTrackingOpen = true;
+
+   // v5.1 — فیکسِ کیسِ مرزی (ریشه‌یابیِ Assertِ فیل‌شده در ۲۰۲۶-۰۴-۲۴): اگر خودِ کندلِ شکست
+   // به‌قدری پرنوسان بوده که هم‌زمان لبه‌ی مقابل/هدفِ ۱R را هم لمس کرده، leg۱ (که از خودِ breakIdx
+   // شروع می‌شود، بدونِ تغییر) آن را همان‌جا سوییپ/۱R حساب می‌کند - اما حلقه‌ی زیر از breakIdx+۱
+   // شروع می‌شود و آن کندل را هرگز نمی‌بیند. بدونِ این گارد، RawSweepOccurred=1 می‌شد بدونِ اینکه
+   // MaxDepthIntoBox_Before1R_Pct عمقِ آن کندل را لحاظ کند (ناسازگاریِ Assertِ نسخه‌ی ۵).
+   if(sweepTime1 == rates[breakIdx].time)
+   {
+      double depthAtBreak = (dir > 0) ? (edge - rates[breakIdx].low) / boxSize * 100.0
+                                       : (rates[breakIdx].high - edge) / boxSize * 100.0;
+      if(depthAtBreak > out.maxDepthPct) { out.maxDepthPct = depthAtBreak; out.maxDepthTime = rates[breakIdx].time; }
+      if(out.maxDepthPct >= 50.0 && out.depth50Time == 0) out.depth50Time = rates[breakIdx].time;
+      depthTrackingOpen = false; // پنجره‌ی «قبل از ۱R» همان‌جا (کندلِ شکست) با سوییپ بسته شد
+   }
+   else if(targetTime1 == rates[breakIdx].time)
+   {
+      depthTrackingOpen = false; // ۱R همان کندلِ شکست رسید؛ پنجره‌ی «قبل از ۱R» خالی است
+   }
+
    for(int i = breakIdx + 1; i < count; i++)
    {
       bool touchesEdge = (dir > 0) ? (rates[i].low <= edge) : (rates[i].high >= edge);
@@ -456,7 +475,9 @@ bool BR_AssertConsistency(const SLPResult &lp, const SBracketMetrics &bm, double
 
    bool isSweepLabel = (StringSubstr(lp.label, 0, 6) == "Sweep_");
 
-   if(isSweepLabel && !(bm.rawSweepOccurred && bm.maxDepthPct > 100.0))
+   // v5.1: >=۱۰۰٪ (نه صرفاً >۱۰۰٪ دقیق) - لمسِ دقیقاً روی لبه‌ی مقابل (بدونِ آورشوت) هم طبقِ تعریفِ
+   // مکانیکیِ Sweep («عبور از لبه، حتی شدو» - LP_CheckLeg با <=/>= چک می‌کند) یک سوییپِ معتبر است.
+   if(isSweepLabel && !(bm.rawSweepOccurred && bm.maxDepthPct >= 100.0 - 0.001))
    { outReason = "Sweep_* label but RawSweepOccurred/MaxDepthIntoBox_Before1R_Pct inconsistent"; return(false); }
 
    if(lp.hasBreak && lp.reached1R && bm.maxDepthPct > 100.0)
