@@ -122,10 +122,17 @@ int ST_ServerOffsetSec()
          g_stLastTick = (datetime)GlobalVariableGet(ST_GV_TICK_KEY);
    }
 
-   // (۲) فقط وقتی تیک واقعاً *جلو* رفته (تیکِ تازه، نه فریزشده) دوباره کالیبره کن.
-   //     چون g_stLastTick از GV آمده، در سکوتِ تیک/بعدِ ری‌لود، TimeCurrent == آخرین تیک
-   //     است → شرط برقرار نمی‌شود → مقدارِ پایدار حفظ می‌شود (بدونِ drift).
-   datetime tc = TimeCurrent();
+   // (۲) فقط وقتی ساعتِ سرور واقعاً *جلو* رفته دوباره کالیبره کن.
+   //     v3 (ClaudeCode_FixList_DayBias_v3.md، بندِ ۳-الف): منبعِ کالیبراسیون از TimeCurrent()
+   //     به TimeTradeServer() تغییر کرد. TimeCurrent() آخرین زمانِ تیکِ *دریافت‌شده* را می‌دهد -
+   //     برایِ یک اسکریپتِ یک‌باره (نه EA/اندیکاتورِ زنده)، اگر آخرین تیکِ ترمینال قدیمی باشد
+   //     (مثلاً اسکریپت آخرِ هفته یا مدتی بعدِ آخرین حرکتِ قیمت اجرا شود)، TimeCurrent() یک
+   //     زمانِ گذشته برمی‌گرداند درحالی‌که TimeGMT() زمانِ واقعیِ الان است - تفاضل‌شان دیگر
+   //     آفستِ سرور نیست، بلکه آفست‌بعلاوه‌یِ فاصله‌ی رکودِ تیک است، که باکس را چند دقیقه/ساعت
+   //     جابجا می‌کند (دقیقاً همان علامتِ گزارش‌شده: باکسِ ۲۰۲۶-۰۸-۱۱ چند دلار خطا). TimeTradeServer()
+   //     ساعتِ زنده‌ی سرور است (heartbeat، نه وابسته به رسیدنِ تیکِ قیمت)، پس این مشکل را ندارد.
+   //     تابعِ TimeTradeServer فقط در MQL5 هست؛ این فایل در این ریپو همان نسخه‌ی پورت‌شده‌ی MT5 است.
+   datetime tc = TimeTradeServer();
    if(tc > g_stLastTick)
    {
       int raw = (int)(tc - TimeGMT());
@@ -198,7 +205,9 @@ void ST_ComputeSessionByDaysAgo(int daysAgo,
 //+------------------------------------------------------------------+
 bool ST_IsClosedServerTime(datetime serverEnd)
 {
-   datetime nowSrv = TimeCurrent();
+   // v3: TimeCurrent() به TimeTradeServer() تغییر کرد - همان دلیلِ ST_ServerOffsetSec()
+   // (تیکِ رکودی نباید یک روزِ واقعاً بسته‌شده را «هنوز باز» نشان دهد).
+   datetime nowSrv = TimeTradeServer();
    datetime lastBar = iTime(Symbol(), Period(), 0);
    if(lastBar > nowSrv) nowSrv = lastBar;
    return(serverEnd <= nowSrv);

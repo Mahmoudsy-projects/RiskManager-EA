@@ -7,11 +7,18 @@
 //| نسخه‌ی ۲ (ClaudeCode_Fixes_v2_DayBias، ۱۲ اوت ۲۰۲۶) — F1/F2:         |
 //| لنگرِ روزِ معاملاتی اصلاح شد. باکسِ LP برایِ روزِ D دیگر باکسِ عصرِ      |
 //| همان روز نیست؛ باکسِ عصرِ *شبِ منتهی به D* (روزِ تقویمیِ قبل) است، و     |
-//| پنجره‌ی ارزیابی LP/NY از بسته‌شدنِ همان باکس تا شروعِ باکسِ روزِ بعد     |
-//| است (نه نیمه‌شب تا نیمه‌شبِ تقویمی). این چیزی است که در نسخه‌ی ۱ باعثِ  |
-//| حذفِ کاملِ جمعه‌ها می‌شد (باکسِ عصرِ جمعه بعد از بسته‌شدنِ بازارِ هفته    |
-//| هیچ کندلی ندارد) و پنجره‌ی تشخیصِ LP را به فقط ۳ ساعتِ آخرِ روز         |
-//| (۲۱:۰۰-۲۴:۰۰) محدود می‌کرد.                                          |
+//| پنجره‌ی ارزیابی LP از بسته‌شدنِ همان باکس تا شروعِ باکسِ روزِ بعد است.   |
+//|                                                                    |
+//| نسخه‌ی ۳ (ClaudeCode_FixList_DayBias_v3، ۱۲ اوت ۲۰۲۶) — سه اصلاح:    |
+//|  ۱) پنجره‌ی ارزیابیِ NY Edge (نه LP) عریض‌تر شد: از پایانِ سشنِ NY      |
+//|     مرجع تا انتهایِ پنجره‌ی روزِ D — نسخه‌ی ۲ آن را از بسته‌شدنِ باکسِ   |
+//|     توکیو شروع می‌کرد که بیش‌ازحد دیر بود (NY_AtVote هرگز Break/Sweep |
+//|     نمی‌شد، ۸۳٪ Silent). NY_AtVote حالا عکسِ فوریِ لحظه‌ی بسته‌شدنِ     |
+//|     باکسِ توکیو در وسطِ همین پنجره‌ی عریض‌تر است.                      |
+//|  ۲) رفتارِ «بدون شکستِ LP -> Red» صراحتاً مستند شد (DetectionLayer).  |
+//|  ۳) کالیبراسیونِ آفستِ سرور به TimeTradeServer() تغییر کرد            |
+//|     (RM_SessionTime.mqh) + دو ستونِ تشخیصیِ BoxStart_Server/          |
+//|     BoxEnd_Server در انتهای CSV، برایِ راستی‌آزماییِ مستقیمِ کاربر.     |
 //+------------------------------------------------------------------+
 #property copyright "RiskManager-EA"
 #property script_show_inputs
@@ -27,7 +34,7 @@ input string InpOutputFile = "DayBias_History_XAUUSD.csv"; // در MQL5/Files/
 input int InpTokyoStartH  = 20, InpTokyoStartM = 0,  InpTokyoEndH = 21, InpTokyoEndM = 0;  // باکسِ توکیو (LP)
 input int InpLondonStartH = 3,  InpLondonStartM = 0,  InpLondonEndH = 4,  InpLondonEndM = 0;  // باکسِ لندن (فقط لاگِ خام)
 input int InpNYBoxStartH  = 8,  InpNYBoxStartM = 30, InpNYBoxEndH = 9,  InpNYBoxEndM = 30; // باکسِ NY روزِ جاری (فقط لاگِ خام)
-input int InpNYPrevStartH = 9,  InpNYPrevStartM = 0,  InpNYPrevEndH = 18, InpNYPrevEndM = 0; // سشنِ کاملِ NY روزِ معاملاتیِ قبل (NY Edge) — F2
+input int InpNYPrevStartH = 9,  InpNYPrevStartM = 0,  InpNYPrevEndH = 18, InpNYPrevEndM = 0; // سشنِ کاملِ NY روزِ معاملاتیِ قبل (NY Edge)
 
 // F2: حداکثر تعداد روزِ عقب‌گردِ تقویمی برای پیدا کردنِ آخرین روزِ معاملاتیِ دارایِ سشنِ NY
 // (آخرِ هفته = ۲ روز؛ بافرِ اضافه برایِ تعطیلاتِ رسمیِ متوالی).
@@ -84,8 +91,6 @@ bool ProcessOneDay(int handle, string symbol, int daysAgo, int &green, int &yell
    if(!ST_IsClosedServerTime(windowEnd))
       return(false); // روزِ معاملاتی هنوز کامل نشده (جاری/آینده)
 
-   datetime windowStart = tokyoLP.end;
-
    // F2: مرجعِ NY Edge = آخرین روزِ معاملاتیِ قبل از D (نه لزوماً روزِ تقویمیِ قبل).
    if(!FindPrevTradingDayNYSession(symbol, daysAgo, nyPrev))
       return(false);
@@ -95,14 +100,29 @@ bool ProcessOneDay(int handle, string symbol, int daysAgo, int &green, int &yell
    BL_ComputeSessionRange(symbol, daysAgo, InpLondonStartH, InpLondonStartM, InpLondonEndH, InpLondonEndM, london);
    BL_ComputeSessionRange(symbol, daysAgo, InpNYBoxStartH, InpNYBoxStartM, InpNYBoxEndH, InpNYBoxEndM, nyBox);
 
+   // نسخه‌ی ۳ (بندِ ۱): پنجره‌ی NY Edge از پایانِ سشنِ NY مرجع شروع می‌شود - عریض‌تر از پنجره‌ی
+   // LP (که همچنان از بسته‌شدنِ باکسِ توکیو شروع می‌شود، دست‌نخورده). یک آرایه‌ی عریض می‌گیریم و
+   // زیرآرایه‌ی LP را از داخلش برش می‌زنیم تا دو بار CopyRates روی بازه‌ی هم‌پوشان نزنیم.
+   datetime nyWindowStart = nyPrev.end;
+
+   MqlRates wideRates[];
+   int wideN = CopyRates(symbol, PERIOD_M5, nyWindowStart, windowEnd - 1, wideRates);
+   if(wideN <= 0) return(false);
+   if(wideRates[0].time > wideRates[wideN - 1].time) ArrayReverse(wideRates); // اطمینان از ترتیبِ صعودیِ زمان
+
+   // زیرآرایه‌ی LP: از اولین کندلی که زمانش >= بسته‌شدنِ باکسِ توکیو است.
+   int lpStartIdx = 0;
+   while(lpStartIdx < wideN && wideRates[lpStartIdx].time < tokyoLP.end) lpStartIdx++;
+   int lpCount = wideN - lpStartIdx;
+   if(lpCount <= 0) return(false); // بینِ بسته‌شدنِ باکس و انتهایِ پنجره هیچ کندلی نبود
+
    MqlRates dayRates[];
-   int n = CopyRates(symbol, PERIOD_M5, windowStart, windowEnd - 1, dayRates);
-   if(n <= 0) return(false);
-   if(dayRates[0].time > dayRates[n - 1].time) ArrayReverse(dayRates); // اطمینان از ترتیبِ صعودیِ زمان
+   ArrayResize(dayRates, lpCount);
+   for(int i = 0; i < lpCount; i++) dayRates[i] = wideRates[lpStartIdx + i];
 
    double dayHigh = dayRates[0].high, dayLow = dayRates[0].low;
    datetime dayHighTime = dayRates[0].time, dayLowTime = dayRates[0].time;
-   for(int i = 1; i < n; i++)
+   for(int i = 1; i < lpCount; i++)
    {
       if(dayRates[i].high > dayHigh) { dayHigh = dayRates[i].high; dayHighTime = dayRates[i].time; }
       if(dayRates[i].low  < dayLow)  { dayLow  = dayRates[i].low;  dayLowTime  = dayRates[i].time; }
@@ -111,19 +131,19 @@ bool ProcessOneDay(int handle, string symbol, int daysAgo, int &green, int &yell
    SSessionRange fullDay;
    BL_ResetRange(fullDay);
    fullDay.valid = true;
-   fullDay.start = windowStart; fullDay.end = windowEnd;
-   fullDay.open  = dayRates[0].open; fullDay.close = dayRates[n - 1].close;
+   fullDay.start = tokyoLP.end; fullDay.end = windowEnd;
+   fullDay.open  = dayRates[0].open; fullDay.close = dayRates[lpCount - 1].close;
    fullDay.high  = dayHigh; fullDay.low = dayLow;
    fullDay.highTime = dayHighTime; fullDay.lowTime = dayLowTime;
-   fullDay.barCount = n;
+   fullDay.barCount = lpCount;
 
-   // --- LP: از اولین کندلِ پنجره (بلافاصله بعد از بسته‌شدنِ باکسِ توکیو) تا پایانِ پنجره ---
+   // --- LP: از اولین کندلِ بعد از بسته‌شدنِ باکسِ توکیو تا پایانِ پنجره (دست‌نخورده از نسخه‌ی ۲) ---
    SLPResult lp;
-   LP_Detect(dayRates, n, tokyoLP.high, tokyoLP.low, lp);
+   LP_Detect(dayRates, lpCount, tokyoLP.high, tokyoLP.low, lp);
 
-   // --- NY Edge: کلِ پنجره، از لحظه‌ی بسته‌شدنِ باکسِ توکیو (F3: بدونِ نشتِ رویدادِ پیش از آن) ---
+   // --- NY Edge: پنجره‌ی عریض (از پایانِ سشنِ NY مرجع)، رأی = لحظه‌ی بسته‌شدنِ باکسِ توکیو ---
    SNYEdgeState nyAtVote, nyEndOfDay;
-   NY_Track(dayRates, n, nyPrev.high, nyPrev.low, tokyoLP.close, nyAtVote, nyEndOfDay);
+   NY_Track(wideRates, wideN, nyPrev.high, nyPrev.low, tokyoLP.end, nyAtVote, nyEndOfDay);
 
    // --- F4: Assert تعریفِ Break (باید همیشه ساختاراً برقرار باشد؛ نقض = باگ) ---
    double nyRange     = nyPrev.high - nyPrev.low;
@@ -132,13 +152,19 @@ bool ProcessOneDay(int handle, string symbol, int daysAgo, int &green, int &yell
    string nyAtVoteLabel   = NY_StatusLabel(nyAtVote);
    string nyEndOfDayLabel = NY_StatusLabel(nyEndOfDay);
 
-   if(!DL_AssertBreakPenetration(nyAtVoteLabel, atVotePct) ||
-      !DL_AssertBreakPenetration(nyEndOfDayLabel, endOfDayPct))
+   bool assertOk = DL_AssertBreakPenetration(nyAtVoteLabel, atVotePct) &&
+                   DL_AssertBreakPenetration(nyEndOfDayLabel, endOfDayPct) &&
+                   DL_AssertBreakTimeInWindow(nyAtVote.breakTime, nyWindowStart, windowEnd) &&
+                   DL_AssertBreakTimeInWindow(nyEndOfDay.breakTime, nyWindowStart, windowEnd);
+
+   if(!assertOk)
    {
       int y2, m2, d2;
       ST_GetNYCalendarDate(daysAgo, y2, m2, d2);
-      PrintFormat("DayBias ASSERT FAILED (F4): Date=%04d-%02d-%02d AtVote=%s(%.2f%%) EndOfDay=%s(%.2f%%) — Break با نفوذِ کمتر از ۲۳٪، احتمالِ باگ در DetectionLayer.",
-                  y2, m2, d2, nyAtVoteLabel, atVotePct, nyEndOfDayLabel, endOfDayPct);
+      PrintFormat("DayBias ASSERT FAILED: Date=%04d-%02d-%02d AtVote=%s(%.2f%%,BreakTime=%s) EndOfDay=%s(%.2f%%,BreakTime=%s) Window=[%s,%s) — احتمالِ باگ در DetectionLayer.",
+                  y2, m2, d2, nyAtVoteLabel, atVotePct, CSV_TimeSec(nyAtVote.breakTime),
+                  nyEndOfDayLabel, endOfDayPct, CSV_TimeSec(nyEndOfDay.breakTime),
+                  CSV_TimeSec(nyWindowStart), CSV_TimeSec(windowEnd));
       assertFailures++;
       return(false);
    }
@@ -174,7 +200,8 @@ bool ProcessOneDay(int handle, string symbol, int daysAgo, int &green, int &yell
       dayColor + "," + rDayStr + "," +
       CSV_Range4(tokyoLP, g_digits) + "," + CSV_Range4(london, g_digits) + "," +
       CSV_Range4(nyBox, g_digits) + "," + CSV_Range4(fullDay, g_digits) + "," +
-      CSV_Time(dayHighTime) + "," + CSV_Time(dayLowTime);
+      CSV_Time(dayHighTime) + "," + CSV_Time(dayLowTime) + "," +
+      CSV_TimeSec(tokyoLP.start) + "," + CSV_TimeSec(tokyoLP.end);
 
    FileWriteString(handle, row + "\r\n");
    return(true);
@@ -192,6 +219,12 @@ void OnStart()
       return;
    }
 
+   // نسخه‌ی ۳ (بندِ ۳): آفستِ سرور استفاده‌شده (بعد از فیکسِ TimeTradeServer()) را چاپ کن تا
+   // مستقیماً روی حسابِ واقعی قابلِ‌راستی‌آزمایی باشد.
+   int offsetSec = ST_ServerOffsetSec();
+   PrintFormat("DayBias: Server-UTC offset = %d sec (%.2f h) [via TimeTradeServer()-TimeGMT()]",
+               offsetSec, offsetSec / 3600.0);
+
    int handle = FileOpen(InpOutputFile, FILE_WRITE | FILE_TXT | FILE_ANSI);
    if(handle == INVALID_HANDLE)
    {
@@ -201,7 +234,7 @@ void OnStart()
    FileWriteString(handle, CSV_HEADER + "\r\n");
 
    datetime firstDate = (datetime)SeriesInfoInteger(symbol, PERIOD_M5, SERIES_FIRSTDATE);
-   int maxDaysAgo = (int)((TimeCurrent() - firstDate) / 86400) + 3; // بافرِ کوچک، گاردِ پوشش خودش دقیق skip می‌کند
+   int maxDaysAgo = (int)((TimeTradeServer() - firstDate) / 86400) + 3; // بافرِ کوچک، گاردِ پوشش خودش دقیق skip می‌کند
    if(maxDaysAgo < 1) maxDaysAgo = 1;
 
    int processed = 0, skipped = 0;
@@ -217,7 +250,7 @@ void OnStart()
 
       if(assertFailures > 0)
       {
-         Print("DayBias: متوقف شد چون تست Assert (F4) فیل کرد — خروجی تا این نقطه معتبر است اما ناقص. لاگِ بالا را برایِ جزئیاتِ روزِ خطادار ببین.");
+         Print("DayBias: متوقف شد چون یک Assert فیل کرد — خروجی تا این نقطه معتبر است اما ناقص. لاگِ بالا را برایِ جزئیاتِ روزِ خطادار ببین.");
          break;
       }
    }
