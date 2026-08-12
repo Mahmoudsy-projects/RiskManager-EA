@@ -73,6 +73,13 @@
 //|  DetectionLayer.mqh's LP_ComputeReEntryMetrics از anchor متفاوتی      |
 //|  (flipTime برایِ Sweep_*، firstTime در غیرِ این‌صورت) اسکن را شروع       |
 //|  می‌کند - نه دوباره از leg۱ مثلِ v5's LP_ComputeBracketMetrics.         |
+//|                                                                    |
+//| نسخه‌ی ۶.۱ (ClaudeCode_Spec_DayBias_v6_1، ۱۲ اوت ۲۰۲۶) — دو ستونِ      |
+//|  تکمیلیِ ترتیبِ رویدادها: PostTouch_Cross50_Time/Cross75_Time، زمانِ    |
+//|  اولین عبورِ عمق از ۵۰٪/۷۵٪ ارتفاعِ باکس *بعد از* لمسِ بازیافتی          |
+//|  (ستونِ PostR1_EdgeTouch_Time)؛ فقط برایِ روزهایی پر که آن لمس رخ داده. |
+//|  همان حلقه‌ی محاسبه‌ی PostTouch_MaxDepthPct (v6) این دو را هم همزمان    |
+//|  ثبت می‌کند - بدونِ اسکنِ اضافه.                                       |
 //+------------------------------------------------------------------+
 #property copyright "RiskManager-EA"
 #property script_show_inputs
@@ -134,7 +141,8 @@ bool FindPrevTradingDayNYSession(string symbol, int daysAgo, SSessionRange &outR
 bool ProcessOneDay(int handle, string symbol, int daysAgo, int &green, int &yellow, int &red, int &assertFailures,
                    int &v5BreakDays, int &v5ConfirmedDays, int &v5RetestBefore1RCount, double &v5SumMaxDepthConfirmed,
                    int &v5RawSweepCount, int &v5Trade2StopHitCount, string &failedDates,
-                   int &v6PostR1TouchCount, double &v6SumPostTouchMaxR, int &v6Reached2RBeforeCount)
+                   int &v6PostR1TouchCount, double &v6SumPostTouchMaxR, int &v6Reached2RBeforeCount,
+                   int &v61Cross50Count, int &v61Cross75Count, string &v61SampleRows, int &v61SampleCount)
 {
    SSessionRange tokyoLP, london, nyBox, nyPrev;
 
@@ -312,6 +320,19 @@ bool ProcessOneDay(int handle, string symbol, int daysAgo, int &green, int &yell
       v6PostR1TouchCount++;
       v6SumPostTouchMaxR += re.postTouchMaxR;
       if(re.postTouchReached2RBefore) v6Reached2RBeforeCount++;
+
+      if(re.postTouchCross50Time != 0) v61Cross50Count++;
+      if(re.postTouchCross75Time != 0) v61Cross75Count++;
+
+      // v6.1، تستِ پذیرشِ ۳: چند نمونه ردیفِ دارایِ هر دو زمان برایِ مرورِ انسانی.
+      if(re.postTouchCross50Time != 0 && re.postTouchCross75Time != 0 && v61SampleCount < 5)
+      {
+         int ys, ms, ds;
+         ST_GetNYCalendarDate(daysAgo, ys, ms, ds);
+         v61SampleRows += StringFormat("%04d-%02d-%02d(Cross50=%s,Cross75=%s) ", ys, ms, ds,
+                                        CSV_Time(re.postTouchCross50Time), CSV_Time(re.postTouchCross75Time));
+         v61SampleCount++;
+      }
    }
 
    int y, m, d;
@@ -352,7 +373,9 @@ bool ProcessOneDay(int handle, string symbol, int daysAgo, int &green, int &yell
       (re.hasData ? CSV_Time(re.firstTouch3RTime) : "") + "," +
       ((re.hasData && re.firstTouch2RTime != 0) ? CSV_Num(re.pullbackAfter2RDepthPct, 2) : "") + "," +
       (re.hasData ? CSV_Num(re.eodR, 3) : "") + "," +
-      (re.hasData ? CSV_Time(re.timeAtMaxR) : "");
+      (re.hasData ? CSV_Time(re.timeAtMaxR) : "") + "," +
+      ((re.hasData && re.postR1TouchTime != 0) ? CSV_Time(re.postTouchCross50Time) : "") + "," +
+      ((re.hasData && re.postR1TouchTime != 0) ? CSV_Time(re.postTouchCross75Time) : "");
 
    FileWriteString(handle, row + "\r\n");
    return(true);
@@ -402,6 +425,10 @@ void OnStart()
    int v6PostR1TouchCount = 0, v6Reached2RBeforeCount = 0;
    double v6SumPostTouchMaxR = 0;
 
+   // نسخه‌ی ۶.۱، تستِ پذیرشِ ۳: تعدادِ Cross50/Cross75 (مخرج = v6PostR1TouchCount) + چند نمونه ردیف.
+   int v61Cross50Count = 0, v61Cross75Count = 0, v61SampleCount = 0;
+   string v61SampleRows = "";
+
    // v5.1: یک Assert فیل‌شده دیگر کلِ اجرا را متوقف نمی‌کند — فقط همان روز رد می‌شود (لاگِ کامل
    // بالای این خلاصه چاپ شده) و حلقه تا آخرِ تاریخچه ادامه می‌یابد.
    for(int daysAgo = maxDaysAgo; daysAgo >= 1; daysAgo--)
@@ -409,7 +436,8 @@ void OnStart()
       if(ProcessOneDay(handle, symbol, daysAgo, colorGreen, colorYellow, colorRed, assertFailures,
                        v5BreakDays, v5ConfirmedDays, v5RetestBefore1RCount, v5SumMaxDepthConfirmed,
                        v5RawSweepCount, v5Trade2StopHitCount, failedDates,
-                       v6PostR1TouchCount, v6SumPostTouchMaxR, v6Reached2RBeforeCount))
+                       v6PostR1TouchCount, v6SumPostTouchMaxR, v6Reached2RBeforeCount,
+                       v61Cross50Count, v61Cross75Count, v61SampleRows, v61SampleCount))
          processed++;
       else
          skipped++;
@@ -444,4 +472,15 @@ void OnStart()
    }
    if(v6PostR1TouchCount > 0)
       PrintFormat("Avg PostTouch_MaxR (on days that touched back): %.2fR", v6SumPostTouchMaxR / v6PostR1TouchCount);
+
+   PrintFormat("=== Re-Entry Depth Sequencing (v6.1) Sanity ===");
+   if(v6PostR1TouchCount > 0)
+   {
+      PrintFormat("Cross50 rate (of PostR1 touches): %.1f%% (%d/%d)",
+                  100.0 * v61Cross50Count / v6PostR1TouchCount, v61Cross50Count, v6PostR1TouchCount);
+      PrintFormat("Cross75 rate (of PostR1 touches): %.1f%% (%d/%d)",
+                  100.0 * v61Cross75Count / v6PostR1TouchCount, v61Cross75Count, v6PostR1TouchCount);
+   }
+   if(v61SampleCount > 0)
+      PrintFormat("Sample rows with both Cross50/Cross75: %s", v61SampleRows);
 }

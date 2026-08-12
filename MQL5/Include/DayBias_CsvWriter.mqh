@@ -59,6 +59,8 @@ string CSV_Range4(const SSessionRange &r, int digits)
 // استراتژیِ کاندیدِ Tokyo Bracket، بعد از BoxStart_Server/BoxEnd_Server. هیچ ستونِ موجودی تغییر نکرد.
 // نسخه‌ی ۶ (ClaudeCode_Spec_DayBias_v6_ReEntry.md): ۱۰ ستونِ صرفاً-مشاهده‌ایِ دیگر برایِ ایده‌ی
 // «بازیافت» + داده‌های عمومیِ مسیرِ روز، در انتها. هیچ ستونِ موجودی تغییر نکرد.
+// نسخه‌ی ۶.۱ (ClaudeCode_Spec_DayBias_v6_1.md): دو ستونِ تکمیلیِ ترتیبِ رویدادها (عبورِ عمق از
+// ۵۰٪/۷۵٪ بعد از لمسِ بازیافتی)، در انتها. هیچ ستونِ موجودی تغییر نکرد.
 const string CSV_HEADER =
    "Date,BoxHigh,BoxLow,BoxSize,LP_FirstBreak_Dir,LP_FirstBreak_Time,LP_FirstBreak_BodyRatio,"
    "LP_Reached1R,LP_Label,LP_FlipTime,LP_1R_Time,NY_PrevHigh,NY_PrevLow,NY_PrevRange,NY_AtVote,"
@@ -71,6 +73,6 @@ const string CSV_HEADER =
    "Reach1R_Time,MaxDepth_Time,Depth50_Time,"
    "PostR1_EdgeTouch_Time,PostTouch_MaxR,PostTouch_MaxDepthPct,PostTouch_Reached2R_Before,"
    "FirstTouch_1_5R_Time,FirstTouch_2R_Time,FirstTouch_3R_Time,Pullback_After2R_MaxDepthPct,"
-   "EOD_R,Time_At_MaxR";
+   "EOD_R,Time_At_MaxR,PostTouch_Cross50_Time,PostTouch_Cross75_Time";
 
 #endif // DAYBIAS_CSVWRITER_MQH

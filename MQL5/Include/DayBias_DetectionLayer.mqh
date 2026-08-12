@@ -520,6 +520,8 @@ struct SReEntryMetrics
    double   pullbackAfter2RDepthPct;   // ستونِ ۶، فقط اگر ستونِ ۵-ب پر؛ می‌تواند منفی باشد
    double   eodR;                      // ستونِ ۷، می‌تواند منفی باشد
    datetime timeAtMaxR;                // ستونِ ۸
+   datetime postTouchCross50Time;      // v6.1، ستونِ ۹، فقط اگر ستونِ ۱ پر
+   datetime postTouchCross75Time;      // v6.1، ستونِ ۱۰، فقط اگر ستونِ ۱ پر
 };
 
 void RE_ResetMetrics(SReEntryMetrics &m)
@@ -529,6 +531,7 @@ void RE_ResetMetrics(SReEntryMetrics &m)
    m.firstTouch1_5RTime = 0; m.firstTouch2RTime = 0; m.firstTouch3RTime = 0;
    m.pullbackAfter2RDepthPct = 0;
    m.eodR = 0; m.timeAtMaxR = 0;
+   m.postTouchCross50Time = 0; m.postTouchCross75Time = 0;
 }
 
 // rates/count/boxHigh/boxLow/lp: همان‌هایی که به LP_Detect داده شد (بدونِ تغییر). dayHighTime/
@@ -611,6 +614,9 @@ void LP_ComputeReEntryMetrics(const MqlRates &rates[], int count, double boxHigh
             double depthNow = (dir > 0) ? (edge - rates[i].low) / boxSize * 100.0
                                          : (rates[i].high - edge) / boxSize * 100.0;
             if(depthNow > maxDepth) maxDepth = depthNow;
+            // v6.1: اولین لحظه‌ی عبورِ عمق از ۵۰٪/۷۵٪ (برایِ بهینه‌سازیِ استاپِ ورودِ دوم بینِ این دو سطح).
+            if(depthNow > 50.0 && out.postTouchCross50Time == 0) out.postTouchCross50Time = rates[i].time;
+            if(depthNow > 75.0 && out.postTouchCross75Time == 0) out.postTouchCross75Time = rates[i].time;
          }
          out.postTouchMaxR = maxR;
          out.postTouchMaxDepthPct = maxDepth;
@@ -644,6 +650,20 @@ bool RE_AssertConsistency(const SLPResult &lp, const SReEntryMetrics &re, double
 
    if(re.eodR > rDayVal + 0.001)
    { outReason = "EOD_R>R_Day"; return(false); }
+
+   // v6.1
+   if(re.postTouchCross75Time != 0 && !(re.postTouchMaxDepthPct > 75.0))
+   { outReason = "PostTouch_Cross75_Time set but PostTouch_MaxDepthPct<=75"; return(false); }
+
+   if(re.postTouchCross50Time != 0 && !(re.postTouchMaxDepthPct > 50.0))
+   { outReason = "PostTouch_Cross50_Time set but PostTouch_MaxDepthPct<=50"; return(false); }
+
+   if(re.postTouchCross75Time != 0 && !(re.postTouchCross50Time != 0 && re.postTouchCross50Time <= re.postTouchCross75Time))
+   { outReason = "PostTouch_Cross75_Time set but PostTouch_Cross50_Time missing/later"; return(false); }
+
+   if((re.postTouchCross50Time != 0 && re.postTouchCross50Time < re.postR1TouchTime) ||
+      (re.postTouchCross75Time != 0 && re.postTouchCross75Time < re.postR1TouchTime))
+   { outReason = "PostTouch_Cross50/75_Time earlier than PostR1_EdgeTouch_Time"; return(false); }
 
    return(true);
 }
