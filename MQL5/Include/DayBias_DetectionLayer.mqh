@@ -498,4 +498,154 @@ bool BR_AssertConsistency(const SLPResult &lp, const SBracketMetrics &bm, double
    return(true);
 }
 
+//------------------------------------------------------------------
+// نسخه‌ی ۶ (ClaudeCode_Spec_DayBias_v6_ReEntry.md) — ستون‌های صرفاً-مشاهده‌ای برایِ ایده‌ی
+// «بازیافت» (re-entry لیمیت رویِ لبه بعد از خروجِ ترید ۱ در ۱R) + داده‌های عمومیِ مسیرِ روز.
+// همه بر مبنایِ جهتِ *تأییدشده* (lp.finalDir) و لبه‌ی متناظرش - برایِ روزهایِ Sweep_* یعنی جهتِ دوم
+// و لبه‌ی مقابل (دقیقاً همان edge/dir که R_Day خودش در DataScript.mq5 برایِ روزهایِ سوییپ استفاده
+// می‌کند - سازگاریِ EOD_R<=R_Day به همین همسان‌سازی متکی است). فقط برایِ روزهایی پر می‌شود که جهتی
+// تأیید شده (lp.finalDir!=0، معادلِ LP_1R_Time غیرِخالی)؛ NoDirection همیشه کاملاً خالی است - چون
+// بدونِ جهتِ تأییدشده، «مضربِ باکس» و «لبه» تعریفی ندارند (همانندِ R_Day که برایِ NoDirection خالی است).
+//------------------------------------------------------------------
+struct SReEntryMetrics
+{
+   bool     hasData;                   // lp.hasBreak && lp.finalDir!=0 (وگرنه همه‌ی ۱۰ ستون خالی)
+   datetime postR1TouchTime;           // ستونِ ۱، ۰=هرگز برنگشت
+   double   postTouchMaxR;             // ستونِ ۲، فقط اگر ستونِ ۱ پر
+   double   postTouchMaxDepthPct;      // ستونِ ۳، فقط اگر ستونِ ۱ پر
+   bool     postTouchReached2RBefore;  // ستونِ ۴، فقط اگر ستونِ ۱ پر
+   datetime firstTouch1_5RTime;        // ستونِ ۵-الف
+   datetime firstTouch2RTime;          // ستونِ ۵-ب
+   datetime firstTouch3RTime;          // ستونِ ۵-ج
+   double   pullbackAfter2RDepthPct;   // ستونِ ۶، فقط اگر ستونِ ۵-ب پر؛ می‌تواند منفی باشد
+   double   eodR;                      // ستونِ ۷، می‌تواند منفی باشد
+   datetime timeAtMaxR;                // ستونِ ۸
+};
+
+void RE_ResetMetrics(SReEntryMetrics &m)
+{
+   m.hasData = false;
+   m.postR1TouchTime = 0; m.postTouchMaxR = 0; m.postTouchMaxDepthPct = 0; m.postTouchReached2RBefore = false;
+   m.firstTouch1_5RTime = 0; m.firstTouch2RTime = 0; m.firstTouch3RTime = 0;
+   m.pullbackAfter2RDepthPct = 0;
+   m.eodR = 0; m.timeAtMaxR = 0;
+}
+
+// rates/count/boxHigh/boxLow/lp: همان‌هایی که به LP_Detect داده شد (بدونِ تغییر). dayHighTime/
+// dayLowTime/dayCloseVal: از پنجره‌ی *کاملِ* روز (DataScript.mq5) - برایِ خودکفا بودنِ Time_At_MaxR/EOD_R.
+void LP_ComputeReEntryMetrics(const MqlRates &rates[], int count, double boxHigh, double boxLow,
+                               const SLPResult &lp, datetime dayHighTime, datetime dayLowTime, double dayCloseVal,
+                               SReEntryMetrics &out)
+{
+   RE_ResetMetrics(out);
+   if(!lp.hasBreak || lp.finalDir == 0 || lp.oneRTime == 0) return; // NoDirection یا هرگز به ۱R نرسید
+
+   int dir = lp.finalDir;
+   double boxSize = boxHigh - boxLow;
+   double edge    = (dir > 0) ? boxHigh : boxLow;
+
+   out.hasData = true;
+   if(boxSize <= 0) return; // گاردِ دفاعیِ همسانِ v5 (باکسِ تخت، عملاً هرگز رخ نمی‌دهد)
+
+   // بندِ ۳ سند: روزهایِ Sweep_* نسبت به جهتِ دوم و لبه‌ی مقابل سنجیده می‌شوند - anchor برایِ شروعِ
+   // اسکنِ «مسیرِ جهتِ تأییدشده» برایِ آن‌ها flipTime (شروعِ leg۲) است، نه firstTime (شروعِ leg۱).
+   bool isSweepLabel = (StringSubstr(lp.label, 0, 6) == "Sweep_");
+   datetime anchorTime = isSweepLabel ? lp.flipTime : lp.firstTime;
+   int anchorIdx = LP_FindBarIndex(rates, count, anchorTime);
+   if(anchorIdx < 0) return; // گاردِ دفاعیِ محض
+
+   // --- بندِ ۵: FirstTouch_1.5R/2R/3R، از anchorIdx (شاملِ خودش، مثلِ leg۱/LP_CheckLeg) تا پایانِ روز ---
+   double level15 = edge + dir * 1.5 * boxSize;
+   double level2  = edge + dir * 2.0 * boxSize;
+   double level3  = edge + dir * 3.0 * boxSize;
+   for(int i = anchorIdx; i < count; i++)
+   {
+      bool hit15 = (dir > 0) ? (rates[i].high >= level15) : (rates[i].low <= level15);
+      bool hit2  = (dir > 0) ? (rates[i].high >= level2)  : (rates[i].low <= level2);
+      bool hit3  = (dir > 0) ? (rates[i].high >= level3)  : (rates[i].low <= level3);
+      if(hit15 && out.firstTouch1_5RTime == 0) out.firstTouch1_5RTime = rates[i].time;
+      if(hit2  && out.firstTouch2RTime   == 0) out.firstTouch2RTime   = rates[i].time;
+      if(hit3  && out.firstTouch3RTime   == 0) out.firstTouch3RTime   = rates[i].time;
+   }
+
+   // --- بندِ ۶: Pullback_After2R_MaxDepthPct، فقط اگر ۲R زده شد؛ از کندلِ *بعدِ* لمسِ ۲R تا پایانِ
+   //    روز - همان مقیاسِ MaxDepth (۰=لبه، ۱۰۰=لبه‌ی مقابل)؛ اگر هرگز به لبه برنگشت، منفی می‌ماند
+   //    (فاصله‌ی همچنان‌بیرون‌ازباکس تا لبه).
+   if(out.firstTouch2RTime != 0)
+   {
+      int touch2Idx = LP_FindBarIndex(rates, count, out.firstTouch2RTime);
+      if(touch2Idx >= 0)
+      {
+         double worst = (dir > 0) ? rates[touch2Idx].low : rates[touch2Idx].high;
+         for(int i = touch2Idx + 1; i < count; i++)
+         {
+            if(dir > 0) { if(rates[i].low  < worst) worst = rates[i].low;  }
+            else        { if(rates[i].high > worst) worst = rates[i].high; }
+         }
+         out.pullbackAfter2RDepthPct = (dir > 0) ? (edge - worst) / boxSize * 100.0
+                                                  : (worst - edge) / boxSize * 100.0;
+      }
+   }
+
+   // --- بندِ ۱-۴: بازیافتِ بعد از ۱R، از کندلِ *بعدِ* LP_1R_Time (طبقِ همان قراردادِ «بعد از کلوز» -
+   //    مثلِ RetestTouch_Time در v5) تا پایانِ روز ---
+   int r1Idx = LP_FindBarIndex(rates, count, lp.oneRTime);
+   if(r1Idx >= 0)
+   {
+      for(int i = r1Idx + 1; i < count; i++)
+      {
+         bool touches = (dir > 0) ? (rates[i].low <= edge) : (rates[i].high >= edge);
+         if(touches) { out.postR1TouchTime = rates[i].time; break; }
+      }
+
+      if(out.postR1TouchTime != 0)
+      {
+         out.postTouchReached2RBefore = (out.firstTouch2RTime != 0 && out.firstTouch2RTime < out.postR1TouchTime);
+
+         int touchIdx = LP_FindBarIndex(rates, count, out.postR1TouchTime);
+         double maxR = 0, maxDepth = 0;
+         for(int i = touchIdx + 1; i < count; i++)
+         {
+            double rNow = (dir > 0) ? (rates[i].high - edge) / boxSize : (edge - rates[i].low) / boxSize;
+            if(rNow > maxR) maxR = rNow;
+            double depthNow = (dir > 0) ? (edge - rates[i].low) / boxSize * 100.0
+                                         : (rates[i].high - edge) / boxSize * 100.0;
+            if(depthNow > maxDepth) maxDepth = depthNow;
+         }
+         out.postTouchMaxR = maxR;
+         out.postTouchMaxDepthPct = maxDepth;
+      }
+   }
+
+   // --- بندِ ۷/۸: EOD_R (کلوزِ پایانِ روز، می‌تواند منفی باشد) و Time_At_MaxR (کپیِ خودکفایِ
+   //    DayHigh_Time/DayLow_Time طبقِ جهتِ تأییدشده) ---
+   out.eodR = (dir > 0) ? (dayCloseVal - edge) / boxSize : (edge - dayCloseVal) / boxSize;
+   out.timeAtMaxR = (dir > 0) ? dayHighTime : dayLowTime;
+}
+
+// نسخه‌ی ۶، بندِ ۴ — چهار ناوردایِ سازگاریِ داخلی که سندِ v6 به‌صراحت خواسته assert شوند.
+// rDayVal = همان مقدارِ R_Day که DataScript.mq5 برایِ این روز محاسبه کرده.
+bool RE_AssertConsistency(const SLPResult &lp, const SReEntryMetrics &re, double rDayVal, string &outReason)
+{
+   if(!re.hasData) return(true);
+
+   // معادلِ «PostTouch_MaxR پر ⟹ PostR1_EdgeTouch_Time پر و >= Reach1R_Time»: چون Reach1R_Time (v5)
+   // برایِ روزهایِ Sweep_* همیشه خالی است (طبقِ تعریفِ خودش)، مقایسه با LP_1R_Time انجام می‌شود که
+   // معادلِ عمومی‌ترِ همان مفهوم برایِ هر دو حالت است؛ با ساختِ کد postR1TouchTime همیشه یا ۰ است یا
+   // اکیداً بعد از lp.oneRTime.
+   if(re.postR1TouchTime != 0 && re.postR1TouchTime <= lp.oneRTime)
+   { outReason = "PostR1_EdgeTouch_Time <= LP_1R_Time (should be strictly after)"; return(false); }
+
+   if(re.firstTouch2RTime != 0 && rDayVal < 2.0 - 0.01)
+   { outReason = "FirstTouch_2R_Time set but R_Day<2"; return(false); }
+
+   if(re.postTouchReached2RBefore && !(re.firstTouch2RTime != 0 && re.firstTouch2RTime <= re.postR1TouchTime))
+   { outReason = "PostTouch_Reached2R_Before=1 but FirstTouch_2R_Time timing inconsistent"; return(false); }
+
+   if(re.eodR > rDayVal + 0.001)
+   { outReason = "EOD_R>R_Day"; return(false); }
+
+   return(true);
+}
+
 #endif // DAYBIAS_DETECTIONLAYER_MQH

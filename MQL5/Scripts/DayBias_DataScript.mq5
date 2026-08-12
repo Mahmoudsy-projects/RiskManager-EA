@@ -62,6 +62,17 @@
 //|  Assertِ Sweep_* هم از >۱۰۰٪ دقیق به >=۱۰۰٪ (با تلورانسِ ۰.۰۰۱، مثلِ    |
 //|  Assertِ F4) تغییر کرد - لمسِ دقیقاً روی لبه (بدونِ آورشوت) هم طبقِ      |
 //|  تعریفِ مکانیکیِ Sweep («حتی شدو») یک سوییپِ معتبر است.                  |
+//|                                                                    |
+//| نسخه‌ی ۶ (ClaudeCode_Spec_DayBias_v6_ReEntry، ۱۲ اوت ۲۰۲۶) —          |
+//|  ۱۰ ستونِ صرفاً-مشاهده‌ایِ دیگر در انتهایِ CSV، برایِ ایده‌ی «بازیافت»      |
+//|  (re-entry لیمیت رویِ لبه بعد از خروجِ نصف در ۱R) + داده‌های عمومیِ     |
+//|  مسیرِ روز (لمسِ ۱.۵R/۲R/۳R، پول‌بک بعد از ۲R، R پایانِ روز). هیچ        |
+//|  ستون/منطقِ موجودی تغییر نکرد. همه بر مبنایِ جهتِ *تأییدشده*             |
+//|  (LP_Label != NoDirection) - برایِ روزهایِ Sweep_* یعنی جهتِ دوم و       |
+//|  لبه‌ی مقابل (دقیقاً همان edge/dir که R_Day خودش استفاده می‌کند)، پس     |
+//|  DetectionLayer.mqh's LP_ComputeReEntryMetrics از anchor متفاوتی      |
+//|  (flipTime برایِ Sweep_*، firstTime در غیرِ این‌صورت) اسکن را شروع       |
+//|  می‌کند - نه دوباره از leg۱ مثلِ v5's LP_ComputeBracketMetrics.         |
 //+------------------------------------------------------------------+
 #property copyright "RiskManager-EA"
 #property script_show_inputs
@@ -122,7 +133,8 @@ bool FindPrevTradingDayNYSession(string symbol, int daysAgo, SSessionRange &outR
 //------------------------------------------------------------------
 bool ProcessOneDay(int handle, string symbol, int daysAgo, int &green, int &yellow, int &red, int &assertFailures,
                    int &v5BreakDays, int &v5ConfirmedDays, int &v5RetestBefore1RCount, double &v5SumMaxDepthConfirmed,
-                   int &v5RawSweepCount, int &v5Trade2StopHitCount, string &failedDates)
+                   int &v5RawSweepCount, int &v5Trade2StopHitCount, string &failedDates,
+                   int &v6PostR1TouchCount, double &v6SumPostTouchMaxR, int &v6Reached2RBeforeCount)
 {
    SSessionRange tokyoLP, london, nyBox, nyPrev;
 
@@ -278,6 +290,30 @@ bool ProcessOneDay(int handle, string symbol, int daysAgo, int &green, int &yell
       }
    }
 
+   // --- نسخه‌ی ۶: ستون‌های بازیافت + مسیرِ عمومیِ روز ---
+   SReEntryMetrics re;
+   LP_ComputeReEntryMetrics(dayRates, lpCount, tokyoLP.high, tokyoLP.low, lp, dayHighTime, dayLowTime,
+                             fullDay.close, re);
+
+   string reReason;
+   if(!RE_AssertConsistency(lp, re, rVal, reReason))
+   {
+      int y4, m4, d4;
+      ST_GetNYCalendarDate(daysAgo, y4, m4, d4);
+      PrintFormat("DayBias ASSERT FAILED (v6 Re-Entry): Date=%04d-%02d-%02d Label=%s Reason=%s",
+                  y4, m4, d4, lp.label, reReason);
+      assertFailures++;
+      failedDates += (StringLen(failedDates) > 0 ? "," : "") + StringFormat("%04d-%02d-%02d", y4, m4, d4);
+      return(false);
+   }
+
+   if(re.hasData && re.postR1TouchTime != 0)
+   {
+      v6PostR1TouchCount++;
+      v6SumPostTouchMaxR += re.postTouchMaxR;
+      if(re.postTouchReached2RBefore) v6Reached2RBeforeCount++;
+   }
+
    int y, m, d;
    ST_GetNYCalendarDate(daysAgo, y, m, d);
 
@@ -306,7 +342,17 @@ bool ProcessOneDay(int handle, string symbol, int daysAgo, int &green, int &yell
       ((bm.hasData && bm.rawSweepOccurred) ? CSV_Bool(bm.trade2StopHit) : "") + "," +
       (bm.hasData ? CSV_Time(bm.reach1RTime) : "") + "," +
       (bm.hasData ? CSV_Time(bm.maxDepthTime) : "") + "," +
-      (bm.hasData ? CSV_Time(bm.depth50Time) : "");
+      (bm.hasData ? CSV_Time(bm.depth50Time) : "") + "," +
+      ((re.hasData && re.postR1TouchTime != 0) ? CSV_Time(re.postR1TouchTime) : "") + "," +
+      ((re.hasData && re.postR1TouchTime != 0) ? CSV_Num(re.postTouchMaxR, 3) : "") + "," +
+      ((re.hasData && re.postR1TouchTime != 0) ? CSV_Num(re.postTouchMaxDepthPct, 2) : "") + "," +
+      ((re.hasData && re.postR1TouchTime != 0) ? CSV_Bool(re.postTouchReached2RBefore) : "") + "," +
+      (re.hasData ? CSV_Time(re.firstTouch1_5RTime) : "") + "," +
+      (re.hasData ? CSV_Time(re.firstTouch2RTime) : "") + "," +
+      (re.hasData ? CSV_Time(re.firstTouch3RTime) : "") + "," +
+      ((re.hasData && re.firstTouch2RTime != 0) ? CSV_Num(re.pullbackAfter2RDepthPct, 2) : "") + "," +
+      (re.hasData ? CSV_Num(re.eodR, 3) : "") + "," +
+      (re.hasData ? CSV_Time(re.timeAtMaxR) : "");
 
    FileWriteString(handle, row + "\r\n");
    return(true);
@@ -351,13 +397,19 @@ void OnStart()
    int v5BreakDays = 0, v5ConfirmedDays = 0, v5RetestBefore1RCount = 0, v5RawSweepCount = 0, v5Trade2StopHitCount = 0;
    double v5SumMaxDepthConfirmed = 0;
 
+   // نسخه‌ی ۶، تستِ پذیرشِ ۳: sanity - v5ConfirmedDays همان مخرجِ «روزهایِ تأییدشده» است (re.hasData
+   // دقیقاً معادلِ bm.hasData && lp.label!=NoDirection است).
+   int v6PostR1TouchCount = 0, v6Reached2RBeforeCount = 0;
+   double v6SumPostTouchMaxR = 0;
+
    // v5.1: یک Assert فیل‌شده دیگر کلِ اجرا را متوقف نمی‌کند — فقط همان روز رد می‌شود (لاگِ کامل
    // بالای این خلاصه چاپ شده) و حلقه تا آخرِ تاریخچه ادامه می‌یابد.
    for(int daysAgo = maxDaysAgo; daysAgo >= 1; daysAgo--)
    {
       if(ProcessOneDay(handle, symbol, daysAgo, colorGreen, colorYellow, colorRed, assertFailures,
                        v5BreakDays, v5ConfirmedDays, v5RetestBefore1RCount, v5SumMaxDepthConfirmed,
-                       v5RawSweepCount, v5Trade2StopHitCount, failedDates))
+                       v5RawSweepCount, v5Trade2StopHitCount, failedDates,
+                       v6PostR1TouchCount, v6SumPostTouchMaxR, v6Reached2RBeforeCount))
          processed++;
       else
          skipped++;
@@ -381,4 +433,15 @@ void OnStart()
    PrintFormat("Raw sweep occurred: %d days", v5RawSweepCount);
    if(v5RawSweepCount > 0)
       PrintFormat("Trade2_StopHit rate: %.1f%% (%d/%d)", 100.0 * v5Trade2StopHitCount / v5RawSweepCount, v5Trade2StopHitCount, v5RawSweepCount);
+
+   PrintFormat("=== Re-Entry (v6) Sanity ===");
+   if(v5ConfirmedDays > 0)
+   {
+      PrintFormat("PostR1_EdgeTouch rate on confirmed days: %.1f%% (%d/%d)",
+                  100.0 * v6PostR1TouchCount / v5ConfirmedDays, v6PostR1TouchCount, v5ConfirmedDays);
+      PrintFormat("Reached2R_Before rate (of PostR1 touches): %s",
+                  v6PostR1TouchCount > 0 ? StringFormat("%.1f%% (%d/%d)", 100.0 * v6Reached2RBeforeCount / v6PostR1TouchCount, v6Reached2RBeforeCount, v6PostR1TouchCount) : "n/a");
+   }
+   if(v6PostR1TouchCount > 0)
+      PrintFormat("Avg PostTouch_MaxR (on days that touched back): %.2fR", v6SumPostTouchMaxR / v6PostR1TouchCount);
 }
