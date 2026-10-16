@@ -1,0 +1,9 @@
+# personal / account data - never commit
+*.csv
+*.log
+*.set
+*.ex4
+*.ex5
+*backup*.txt
+Trade*Journal*
+*.xlsx
