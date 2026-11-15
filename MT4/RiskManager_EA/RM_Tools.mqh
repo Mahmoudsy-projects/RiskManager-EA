@@ -2058,7 +2058,7 @@ void WriteDefaultStrategySetups()
 // از v80 است (یعنی هنوز لیست قبلی) -> *یک‌بار* با لیست جدید جایگزین می‌شه (نسخه‌ی قبلی به
 // RM_StrategySetups_backup.txt کپی می‌شه) و GV ثبت می‌شه. از اون به بعد ادیت‌های دستی دست‌نخورده
 // می‌مونن (مثل رفتار عمدی v56 - هیچ‌وقت هر اجرا overwrite نمی‌کنه).
-void AddSetupIfMissing(string stratName, string setupName);   // v107: forward declaration (تعریف پایین‌تر در همین فایل)
+// v107: AddSetupIfMissing پایین‌تر تعریف شده؛ پروتوتایپ جدا در MQL4 خطای «no #import declaration» می‌دهد و لازم هم نیست (ترتیبِ توابع آزاد است).
 void EnsureStrategySetupsSeed()
 {
    int  storedVer = GlobalVariableCheck(GV_STRAT_LIST_VERSION) ? (int)GlobalVariableGet(GV_STRAT_LIST_VERSION) : 0;   // v107
