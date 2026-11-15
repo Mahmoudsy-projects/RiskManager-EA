@@ -27,7 +27,9 @@
 // آفستِ زنده‌ی تأییدشده (وقتی موجود باشد) اولویتِ بالاتری دارد. پس 180 هم برای زنده (به‌عنوان
 // fallback در سکوت/کالیبره‌نشده) و هم برای بک‌تست (مستقیم) درست کار می‌کند - بدونِ سوییچِ دستی.
 // روی بروکرِ غیرِ UTC+3 باید این عدد را عوض کنی (یا 99999 برای خودکار بگذاری).
-input int InpServerUtcOffsetMin = 180;   // Server->UTC offset (min); 180=UTC+3 (default), 99999=auto
+// v107 (FEAT-060): در استراتژی‌تستر (و وقتی هنوز آفستِ زنده کالیبره نشده) این عدد = آفستِ *تابستانیِ آمریکا* (US-DST) است
+// (180=UTC+3)؛ زمستانِ آمریکا خودکار یک ساعت کمتر (UTC+2) از روی قاعده‌ی US-DST اعمال می‌شود. 99999 = خودکار (بدونِ تغییر).
+input int InpServerUtcOffsetMin = 180;   // v107: Server->UTC offset in US-DST/SUMMER (min); 180=UTC+3 (winter=-60 auto), 99999=auto
 
 // نامِ GlobalVariable برای پایدارسازیِ آفست + زمانِ تیکی که باهاش کالیبره شد.
 #define ST_GV_OFFSET_KEY "RM_SrvUtcOffsetSec"
@@ -54,6 +56,92 @@ bool ST_IsUSDST(datetime utcTime)
    datetime dstEnd = StringToTime(IntegerToString(y) + ".11." + IntegerToString(firstSunN) + " 06:00");
 
    return(utcTime >= dstStart && utcTime < dstEnd);
+}
+
+//+------------------------------------------------------------------+
+//| v107 (FEAT-060): DSTِ بازارهای دیگر + تبدیلِ «ساعتِ محلیِ بازار» -> سرور.  |
+//| قواعد: EU = آخرین یکشنبه‌ی مارس -> آخرین یکشنبه‌ی اکتبر (سوییچ ۰۱:۰۰ UTC)؛ |
+//| AU/Sydney = DST از اولین یکشنبه‌ی اکتبر تا اولین یکشنبه‌ی آوریل؛ JP = ندارد.|
+//+------------------------------------------------------------------+
+#define ST_MKT_NY      0   // نیویورک (US rule)
+#define ST_MKT_LONDON  1   // لندن (EU rule)، UTC+0 / +1
+#define ST_MKT_BERLIN  2   // فرانکفورت/برلین (EU rule)، UTC+1 / +2
+#define ST_MKT_TOKYO   3   // توکیو، UTC+9 ثابت (بدونِ DST)
+#define ST_MKT_SYDNEY  4   // سیدنی (AU rule)، UTC+10 / +11
+#define ST_MKT_UTC     5   // UTC خام
+
+// v107: ساعتِ محلیِ سیدنی برای خطِ فرعیِ «۰۱:۰۰» Key Time (ساعتِ پایانیِ سشنِ سیدنی). فقط همین یک عدد را عوض کن.
+#define ST_SYDNEY_FINAL_HOUR_LOCAL 16
+
+// v107: روزِ ماهِ (۱..۳۱) اولین/آخرین یکشنبه‌ی ماه. آخرین‌یکشنبه فقط برای ماه‌های ۳۱‌روزه (مارس/اکتبر) استفاده می‌شود.
+int ST_FirstSundayDay(int y, int month)
+{
+   datetime first = StringToTime(StringFormat("%04d.%02d.01 00:00", y, month));
+   int dow = TimeDayOfWeek(first);
+   return((dow == 0) ? 1 : (8 - dow));
+}
+int ST_LastSundayDay31(int y, int month)
+{
+   datetime last = StringToTime(StringFormat("%04d.%02d.31 00:00", y, month));
+   return(31 - TimeDayOfWeek(last));
+}
+
+bool ST_IsEUDST(datetime utcTime)
+{
+   int y = TimeYear(utcTime);
+   datetime dstStart = StringToTime(StringFormat("%04d.03.%02d 01:00", y, ST_LastSundayDay31(y, 3)));
+   datetime dstEnd   = StringToTime(StringFormat("%04d.10.%02d 01:00", y, ST_LastSundayDay31(y, 10)));
+   return(utcTime >= dstStart && utcTime < dstEnd);
+}
+
+// AU (نیمکره‌ی جنوبی): DST از اولین یکشنبه‌ی اکتبر ۰۲:۰۰ AEST (= شنبه ۱۶:۰۰ UTC) تا اولین یکشنبه‌ی آوریل
+// ۰۳:۰۰ AEDT (= شنبه ۱۶:۰۰ UTC). سال را دور می‌زند: ژانویه..آوریل و اکتبر..دسامبر = DST.
+bool ST_IsAUDST(datetime utcTime)
+{
+   int y = TimeYear(utcTime);
+   datetime dstEnd   = StringToTime(StringFormat("%04d.04.%02d 00:00", y, ST_FirstSundayDay(y, 4)))  - 8 * 3600;
+   datetime dstStart = StringToTime(StringFormat("%04d.10.%02d 00:00", y, ST_FirstSundayDay(y, 10))) - 8 * 3600;
+   return(utcTime < dstEnd || utcTime >= dstStart);
+}
+
+// آفستِ استانداردِ (بدونِ DST) هر بازار نسبت به UTC (ثانیه)
+int ST_MarketStdOffsetSec(int market)
+{
+   switch(market)
+   {
+      case ST_MKT_NY:     return(-5 * 3600);
+      case ST_MKT_LONDON: return(0);
+      case ST_MKT_BERLIN: return(1 * 3600);
+      case ST_MKT_TOKYO:  return(9 * 3600);
+      case ST_MKT_SYDNEY: return(10 * 3600);
+   }
+   return(0);   // ST_MKT_UTC
+}
+
+// آفستِ محلی->UTC بازار در یک لحظه‌ی UTC (ثانیه؛ local = utc + offset)
+int ST_MarketUtcOffsetSec(int market, datetime utcInstant)
+{
+   int off = ST_MarketStdOffsetSec(market);
+   bool dst = false;
+   if(market == ST_MKT_NY)                                  dst = ST_IsUSDST(utcInstant);
+   else if(market == ST_MKT_LONDON || market == ST_MKT_BERLIN) dst = ST_IsEUDST(utcInstant);
+   else if(market == ST_MKT_SYDNEY)                         dst = ST_IsAUDST(utcInstant);
+   return(dst ? off + 3600 : off);
+}
+
+// ساعتِ دیواریِ محلیِ بازار (به‌صورت «raw») -> UTC. DST در همان لحظه‌ی واقعی (نه ظهرِ روز) سنجیده می‌شود.
+datetime ST_MarketLocalToUtc(int market, datetime localRaw)
+{
+   datetime guess = localRaw - ST_MarketStdOffsetSec(market);
+   return(localRaw - ST_MarketUtcOffsetSec(market, guess));
+}
+
+// آفستِ سرور بر پایه‌ی «اینپوتِ تابستانی + قاعده‌ی US-DST» (تستر / زمانِ کالیبره‌نشده). 99999 -> ۰ (مثلِ قبل).
+int ST_InputRuleOffsetAtUtc(datetime utcInstant)
+{
+   if(InpServerUtcOffsetMin == 99999) return(0);
+   int summer = InpServerUtcOffsetMin * 60;
+   return(ST_IsUSDST(utcInstant) ? summer : summer - 3600);
 }
 
 //+------------------------------------------------------------------+
@@ -102,10 +190,11 @@ int ST_ServerOffsetSec()
    //     ممکن است منتقل نشود. اگر آفستِ دستی داده شده، مستقیم همان (مسیرِ بک‌تست)؛ وگرنه صریحاً ۰
    //     (باکس‌ها آشکارا غلط می‌مانند تا کاربر آفست بدهد - نه یک کالیبراسیونِ گمراه‌کننده که حتی
    //     ممکن است GVِ زنده را هم خراب کند).
+   // v107 (FEAT-060): در تستر اینپوت = آفستِ تابستانیِ آمریکا؛ زمستان/تابستانِ «الانِ شبیه‌سازی» از قاعده‌ی US-DST.
    if(IsTesting())
    {
       if(InpServerUtcOffsetMin != 99999)
-         return(InpServerUtcOffsetMin * 60);
+         return(ST_InputRuleOffsetAtUtc(TimeCurrent() - InpServerUtcOffsetMin * 60));
       return(0);
    }
 
@@ -180,7 +269,7 @@ int ST_ServerOffsetSec()
    int rmDiagRet;
    string rmDiagSrc;
    if(g_stHaveOffset)                       { rmDiagRet = g_stOffsetSec;            rmDiagSrc = "live/GV"; }
-   else if(InpServerUtcOffsetMin != 99999)  { rmDiagRet = InpServerUtcOffsetMin*60; rmDiagSrc = "input-fallback"; }
+   else if(InpServerUtcOffsetMin != 99999)  { rmDiagRet = ST_InputRuleOffsetAtUtc(TimeCurrent() - InpServerUtcOffsetMin*60); rmDiagSrc = "input-fallback(rule)"; }   // v107: اینپوت=تابستانی، زمستان از قاعده
    else                                     { rmDiagRet = 0;                        rmDiagSrc = "default0"; }
    // [ST-DIAG] مقدارِ برگشتی - فقط وقتی تغییر می‌کند (تا لاگ نترکد)
    static int rmDiagLastRet = -1234567;
@@ -191,6 +280,41 @@ int ST_ServerOffsetSec()
       rmDiagLastRet = rmDiagRet;
    }
    return(rmDiagRet);
+}
+
+//+------------------------------------------------------------------+
+//| v107 (FEAT-060): آفستِ سرور->UTC برای یک لحظه‌ی UTCِ دلخواه (روزِ تاریخی).|
+//| قاعده: سرورِ بروکر با US-DST حرکت می‌کند: UTC+3 در US-DST، وگرنه UTC+2.   |
+//| کالیبراسیونِ زنده (ST_ServerOffsetSec) منبعِ حقیقتِ «الان» می‌ماند؛      |
+//| برای روزهای دیگر فقط «دلتای قاعده» نسبت به الان به آن اضافه می‌شود. اگر   |
+//| آفستِ زنده با قاعده‌ی امروز نخواند، [ST-DIAG] چاپ می‌شود و (محافظه‌کارانه)|
+//| برای همه‌ی روزها همان آفستِ زنده می‌ماند (رفتارِ v106) - نه دلتای قاعده.  |
+//| فقط در زمانِ (باز)ساخت صدا زده می‌شود؛ هیچ اسکنِ per-tick ندارد.         |
+//+------------------------------------------------------------------+
+int ST_ServerOffsetForUtc(datetime utcInstant)
+{
+   int live = ST_ServerOffsetSec();   // اول صدا زده می‌شود تا کالیبراسیون/GV به‌روز شود
+   if(IsTesting() || !g_stHaveOffset)
+      return(ST_InputRuleOffsetAtUtc(utcInstant));   // تستر یا هنوز کالیبره‌نشده: اینپوتِ تابستانی + قاعده
+
+   datetime tc = TimeCurrent();
+   datetime nowUtc = (tc > 0) ? (tc - live) : TimeGMT();
+   int ruleNow = ST_IsUSDST(nowUtc) ? 10800 : 7200;
+   static int stDiagLastKey = -1234567;
+   if(live != ruleNow)
+   {
+      int key = live * 10 + (ST_IsUSDST(nowUtc) ? 1 : 0);
+      if(key != stDiagLastKey)
+      {
+         Print("[ST-DIAG] offset-vs-rule MISMATCH | live=", live, " ruleToday=", ruleNow,
+               " usDST=", (ST_IsUSDST(nowUtc)?"1":"0"), " -> using live offset for ALL days (no per-day delta)");
+         stDiagLastKey = key;
+      }
+      return(live);
+   }
+   stDiagLastKey = -1234567;
+   int ruleAt = ST_IsUSDST(utcInstant) ? 10800 : 7200;
+   return(live + (ruleAt - ruleNow));
 }
 
 //+------------------------------------------------------------------+
@@ -216,9 +340,9 @@ void ST_ComputeSessionServerTime(int y, int m, int d,
    datetime utcStartRaw = nyStartRaw - nyOffsetSec;
    datetime utcEndRaw   = nyEndRaw   - nyOffsetSec;
 
-   int off = ST_ServerOffsetSec();
-   outStart = utcStartRaw + off;
-   outEnd   = utcEndRaw   + off;
+   // v107 (FEAT-060): آفستِ سرور *per-day* (قاعده‌ی US-DST کالیبره با آفستِ زنده) - نه یک آفستِ تکِ «الان» برای همه‌ی روزها.
+   outStart = utcStartRaw + ST_ServerOffsetForUtc(utcStartRaw);
+   outEnd   = utcEndRaw   + ST_ServerOffsetForUtc(utcEndRaw);
 
    // v91: چاپ تشخیصی [ST-DIAG] box حذف شد (به‌خاطر static مشترک بین چند پنجره، تقریباً با هر محاسبه چاپ می‌کرد - ~۸۱ هزار خط در روز).
 }
@@ -235,6 +359,40 @@ void ST_ComputeSessionByDaysAgo(int daysAgo,
    int y, m, d;
    ST_GetNYCalendarDate(daysAgo, y, m, d);
    ST_ComputeSessionServerTime(y, m, d, nyStartH, nyStartM, nyEndH, nyEndM, outStart, outEnd);
+}
+
+//+------------------------------------------------------------------+
+//| v107 (FEAT-060): نسخه‌ی market-aware. ساعتِ شروع/پایان = ساعتِ *محلیِ     |
+//| بازار* روی روزِ تقویمیِ y/m/d؛ DSTِ همان بازار در همان لحظه اعمال می‌شود، |
+//| بعد با آفستِ per-day سرور به وقتِ سرور تبدیل می‌شود. NY عیناً به مسیرِ    |
+//| قدیمی (ST_ComputeSessionServerTime) می‌رود. end<=start = رد از نیمه‌شب.   |
+//+------------------------------------------------------------------+
+void ST_ComputeSessionServerTimeMkt(int market, int y, int m, int d,
+                                    int sH, int sM, int eH, int eM,
+                                    datetime &outStart, datetime &outEnd)
+{
+   if(market == ST_MKT_NY) { ST_ComputeSessionServerTime(y, m, d, sH, sM, eH, eM, outStart, outEnd); return; }
+
+   datetime midRaw   = StringToTime(StringFormat("%04d.%02d.%02d 00:00", y, m, d));
+   datetime startRaw = midRaw + sH * 3600 + sM * 60;
+   datetime endRaw   = midRaw + eH * 3600 + eM * 60;
+   if(endRaw <= startRaw) endRaw += 86400;
+
+   datetime utcStart = ST_MarketLocalToUtc(market, startRaw);
+   datetime utcEnd   = ST_MarketLocalToUtc(market, endRaw);
+   outStart = utcStart + ST_ServerOffsetForUtc(utcStart);
+   outEnd   = utcEnd   + ST_ServerOffsetForUtc(utcEnd);
+}
+
+// daysAgo همان معنای قبلی را دارد (روزِ تقویمیِ نیویورک برای شمارنده‌ی روز؛ منفی = آینده)؛ تاریخِ همان روز
+// روی تقویمِ *بازارِ هدف* اعمال می‌شود (مثلاً توکیو 09:00-18:00 روی همان تاریخ = 00:00-09:00 UTC).
+void ST_ComputeSessionByDaysAgoMkt(int daysAgo, int market,
+                                   int sH, int sM, int eH, int eM,
+                                   datetime &outStart, datetime &outEnd)
+{
+   int y, m, d;
+   ST_GetNYCalendarDate(daysAgo, y, m, d);
+   ST_ComputeSessionServerTimeMkt(market, y, m, d, sH, sM, eH, eM, outStart, outEnd);
 }
 
 //+------------------------------------------------------------------+

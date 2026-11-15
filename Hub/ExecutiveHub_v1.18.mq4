@@ -25,6 +25,7 @@
 //|    ماژول ۲: Session Opening Box + NY Edge (موتور تایم‌زون مشترک)     |
 //|    ماژول ۳: MTF Candle Preview + EMA Overlay                        |
 //+------------------------------------------------------------------+
+//--- v1.18 (FEAT-060, NOT COMPILED): market-anchored automatic DST. SOB inputs are now in each MARKET's LOCAL time (Tokyo JST, London, New York); shared RM_SessionTime.mqh adds EU/AU DST + per-day server offset. NY Edge 09:00-18:00 NY unchanged.
 //--- v1.17 (FEAT-052): 4th master button "Theme" + drawer of 7 chart colour themes and "Original" (one-shot, per chart); Hub-drawn objects get automatic contrast on any theme.
 //--- v1.16: Label tab geometry (all 18 buttons = Master height, narrower label width) + new default label list.
 //--- v1.15: (1) Label slots editable via RM_HubLabels.txt, 18 slots (SP2L, BTB added);
@@ -37,7 +38,7 @@
 #property description "Drawn shapes/labels are independent, selectable chart"
 #property description "objects that persist even if this indicator is removed -"
 #property description "delete them manually if needed."
-#property version   "1.17"
+#property version   "1.18"
 #property strict
 #property indicator_chart_window
 #property indicator_buffers 7
@@ -179,14 +180,16 @@ input int   WMAP_FontSize        = 8;            // Tag font size
 input bool   SOB_EnableTokyo         = true;
 input bool   SOB_EnableLondon        = false; // only Tokyo is backtested/used for now
 input bool   SOB_EnableNewYork       = false; // only Tokyo is backtested/used for now
-input string SOB_TokyoStart          = "20:00";
-input string SOB_TokyoEnd            = "21:00";
+// v1.18 (FEAT-060): Start/End are in the MARKET's LOCAL time (its own DST, per day), not New York time.
+// Tokyo = JST (no DST): 09:00-10:00 JST = 00:00-01:00 UTC = first real Tokyo hour (was NY 20:00-21:00).
+input string SOB_TokyoStart          = "09:00";   // Tokyo local (JST) - v1.18
+input string SOB_TokyoEnd            = "10:00";   // Tokyo local (JST) - v1.18
 input color  SOB_TokyoColor          = clrYellow;
-input string SOB_LondonStart         = "03:00";
-input string SOB_LondonEnd           = "04:00";
+input string SOB_LondonStart         = "08:00";   // London local (EU DST rule) - v1.18 (was NY 03:00)
+input string SOB_LondonEnd           = "09:00";   // London local - v1.18 (was NY 04:00)
 input color  SOB_LondonColor         = clrLimeGreen;
-input string SOB_NewYorkStart        = "08:30";
-input string SOB_NewYorkEnd          = "09:30";
+input string SOB_NewYorkStart        = "08:30";   // New York local (US DST rule) - unchanged
+input string SOB_NewYorkEnd          = "09:30";   // New York local - unchanged
 input color  SOB_NewYorkColor        = clrBlue;
 input int    SOB_ProjectionLevels       = 3;
 input bool   SOB_ShowOpeningBox         = true;
@@ -1686,9 +1689,10 @@ void SOB_Recalculate()
    ObjectsDeleteAll(0, SOB_PFX);
    int days = SOB_CurrentDayOnly ? 2 : MathMax(1, SOB_ShowLastXDays);
 
-   if(SOB_EnableTokyo)   SOB_ProcessSession("Tokyo",   SOB_TokyoStart,   SOB_TokyoEnd,   SOB_TokyoColor,   days);
-   if(SOB_EnableLondon)  SOB_ProcessSession("London",  SOB_LondonStart,  SOB_LondonEnd,  SOB_LondonColor,  days);
-   if(SOB_EnableNewYork) SOB_ProcessSession("NewYork", SOB_NewYorkStart, SOB_NewYorkEnd, SOB_NewYorkColor, days);
+   // v1.18 (FEAT-060): هر سشن با ساعتِ محلیِ بازارِ خودش (DSTِ همان بازار، per-day)
+   if(SOB_EnableTokyo)   SOB_ProcessSession("Tokyo",   SOB_TokyoStart,   SOB_TokyoEnd,   SOB_TokyoColor,   days, ST_MKT_TOKYO);
+   if(SOB_EnableLondon)  SOB_ProcessSession("London",  SOB_LondonStart,  SOB_LondonEnd,  SOB_LondonColor,  days, ST_MKT_LONDON);
+   if(SOB_EnableNewYork) SOB_ProcessSession("NewYork", SOB_NewYorkStart, SOB_NewYorkEnd, SOB_NewYorkColor, days, ST_MKT_NY);
 
    // v1.10 (فیکس - تحقیق «باکس SOB چند کندل جامونده»، ۲۰۲۶-۰۸-۰۸): این تابع تنها ماژولی بود که
    // طبق قاعده‌ی v1.07 («هر ماژول باید دقیقاً یه ChartRedraw() در انتهای منطق خودش داشته باشه»)
@@ -1697,7 +1701,7 @@ void SOB_Recalculate()
    ChartRedraw();
 }
 
-void SOB_ProcessSession(string sessionName, string startStr, string endStr, color col, int days)
+void SOB_ProcessSession(string sessionName, string startStr, string endStr, color col, int days, int mkt = ST_MKT_NY)   // v1.18: + market
 {
    col = Theme_ContrastSafe(col);   // v1.17 (FEAT-052): رنگ ثابتِ ورودی (مثلاً زرد) روی تم‌های روشن خوانا بماند
    int startMin = ParseHHMM(startStr);
@@ -1708,7 +1712,7 @@ void SOB_ProcessSession(string sessionName, string startStr, string endStr, colo
    for(int d = 0; d < days; d++)
    {
       datetime boxStart, boxEnd;
-      ST_ComputeSessionByDaysAgo(d, sh, sm, eh, em, boxStart, boxEnd);
+      ST_ComputeSessionByDaysAgoMkt(d, mkt, sh, sm, eh, em, boxStart, boxEnd);   // v1.18 (FEAT-060): market-aware (NY = مسیرِ قبلی)
       SOB_ProcessOneDay(sessionName, boxStart, boxEnd, col, d);
    }
 }

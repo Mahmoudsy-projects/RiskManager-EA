@@ -725,6 +725,12 @@ datetime g_swCullTime = 0;  // v95: مرز چپ برای ساخت خطوط Key T
 string   g_swBoxNames[];   // اسم قدیمی (v54) مونده - حالا اسم خط‌های عمودی (OBJ_VLINE) رو نگه می‌داره
 string   g_swLblNames[];
 int      g_swObjCount = 0;
+// v107 (FEAT-061): حالتِ نمایشِ KEY TIME - 0=FULL (هر ۱۶ خط، پیش‌فرض = رفتارِ قبلی)، 1=COMPACT (فقط خطوطِ اصلی، فرعی‌ها مخفی).
+// با همان دکمه‌ی KEY TIME چرخه می‌خورد: OFF -> FULL -> COMPACT -> OFF؛ در GlobalVariable ذخیره می‌شود (مثلِ g_swOn).
+#define  KEYTIME_MODE_FULL     0
+#define  KEYTIME_MODE_COMPACT  1
+int      g_swMode = KEYTIME_MODE_FULL;
+string   GV_SW_MODE = "RM_SWMode_" + Symbol();
 
 // FEAT-033 (v81) - جدول ثابت ۱۴ خط KEY TIME، همه به‌وقت نیویورک (طبق سند تسک). dayOffset=1 یعنی
 // این خط به روز تقویمی نیویورکِ *قبل* از daysAgo جاری تعلق داره (مثلاً سشن عصر که از شب قبل
@@ -736,27 +742,34 @@ string KeyTime_Id(int i)
    string ids[KEYTIME_LINE_COUNT] = {"M1","M2","M3","M4","M5","M6","M7","M8","S1","S2","S3","S4","S5","S6","S7","S8"};
    return ids[i];
 }
-void KeyTime_GetLine(int i, int &h, int &m, bool &isMain, int &dayOffset)
+// v107 (FEAT-060): هر خط حالا یک «بازارِ لنگر» دارد (mkt) و ساعتِ h:m = ساعتِ *محلیِ همان بازار* (DSTِ خودش، per-day).
+// خطوطِ NY (۱۷:۰۰ روزِ قبل، ۰۹:۳۰، ۱۱:۰۰، ۱۳:۰۰، ۰۸:۳۰، ۱۴:۰۰، ۱۶:۰۰) عیناً مثلِ v106 با ساعتِ نیویورک می‌مانند.
+// dayOffset فقط برای نام‌گذاریِ آبجکت و خطوطِ NY معنا دارد؛ خطوطِ بازارِ غیر-NY تاریخِ محلی را از (daysAgo - dayOffset) می‌گیرند
+// (یعنی همان روزِ حلقه) - مثلاً «Tokyo open 09:00 JST» روی همان تاریخِ = 00:00 UTC = همان لحظه‌ی «۲۰:۰۰ NY روزِ قبل» در تابستان.
+void KeyTime_GetLine(int i, int &h, int &m, bool &isMain, int &dayOffset, int &mkt)
 {
-   // اصلی (۸ تا، i=0..7) - جدول تسک، ستون نیویورک
-   int mainH[8] = {17,20,21, 2, 3, 9,11,13};
-   int mainM[8] = { 0, 0, 0, 0, 0,30, 0, 0};
-   int mainOff[8] = {1,1,1,0,0,0,0,0};   // ۱۷:۰۰/۲۰:۰۰/۲۱:۰۰ = روز قبل (جدول تسک)
+   // اصلی (۸ تا، i=0..7)
+   //                   M1      M2          M3          M4           M5          M6    M7    M8
+   //                   NY17   Tokyo open  Tokyo+1h   Frankfurt    London      NY    NY    NY
+   int mainH[8]   = {17,  9, 10,  8,  8,  9, 11, 13};
+   int mainM[8]   = { 0,  0,  0,  0,  0, 30,  0,  0};
+   int mainOff[8] = { 1,  1,  1,  0,  0,  0,  0,  0};   // M1/M2/M3 = «روزِ قبل» در نام‌گذاری (مثلِ v106)
+   int mainMkt[8] = {ST_MKT_NY, ST_MKT_TOKYO, ST_MKT_TOKYO, ST_MKT_BERLIN, ST_MKT_LONDON, ST_MKT_NY, ST_MKT_NY, ST_MKT_NY};
    // فرعی (۸ تا، i=8..15)
-   // v97 (درخواست Mahmoud): دو خط فرعی جدید - ۱۹:۰۰ و ۱۲:۰۰ به‌وقت بروکر. بروکر همیشه = نیویورک + ۷
-   // ساعت (سرور با DST آمریکا جابه‌جا می‌شه، ۱۷:۰۰ نیویورک = ۰۰:۰۰ بروکر)، پس: ۱۹:۰۰ بروکر = ۱۲:۰۰
-   // نیویورک، ۱۲:۰۰ بروکر = ۰۵:۰۰ نیویورک. (لیبل زیر خط همیشه به‌وقت بروکره، پس همین ۱۹:۰۰/۱۲:۰۰ دیده می‌شه.)
-   int subH[8] = { 0, 1, 6, 8,14,16,12, 5};
-   int subM[8] = { 0, 0, 0,30, 0, 0, 0, 0};
+   //                   S1(00) S2(01)   S3(06)  S4(08:30) S5(14) S6(16) S7(12)   S8(05)
+   //                   Tokyo+4h Sydney Tokyo-cl+1h NY news NY    NY   London-cl Tokyo close
+   int subH[8]   = {13, ST_SYDNEY_FINAL_HOUR_LOCAL, 19,  8, 14, 16, 17, 18};
+   int subM[8]   = { 0,  0,  0, 30,  0,  0,  0,  0};
+   int subMkt[8] = {ST_MKT_TOKYO, ST_MKT_SYDNEY, ST_MKT_TOKYO, ST_MKT_NY, ST_MKT_NY, ST_MKT_NY, ST_MKT_LONDON, ST_MKT_TOKYO};
 
    if(i<8)
    {
-      h=mainH[i]; m=mainM[i]; isMain=true; dayOffset=mainOff[i];
+      h=mainH[i]; m=mainM[i]; isMain=true; dayOffset=mainOff[i]; mkt=mainMkt[i];
    }
    else
    {
       int j=i-8;
-      h=subH[j]; m=subM[j]; isMain=false; dayOffset=0;
+      h=subH[j]; m=subM[j]; isMain=false; dayOffset=0; mkt=subMkt[j];
    }
 }
 
@@ -883,10 +896,14 @@ void RemoveSessionWindows()
 // بروکر تبدیل شده) مستقیم با TimeHour/TimeMinute خونده می‌شه؛ پس اگه DST نیویورک عوض بشه، دفعه‌ی
 // بعد که این تابع صدا زده بشه (day-reset/toggle/OnInit - همون‌جاهایی که BuildSessionWindows از
 // قبل صدا زده می‌شه) لیبل خودش با مقدار درست بازسازی می‌شه - بدون دیسپچ جدید.
-void BuildOneKeyTimeLine(int daysAgo, int lineIdx, int nyH, int nyM, bool isMain, color c)
+void BuildOneKeyTimeLine(int daysAgo, int lineIdx, int nyH, int nyM, bool isMain, color c, int mkt = ST_MKT_NY, int dayOffset = 0)
 {
+   // v107 (FEAT-060): nyH/nyM = ساعتِ *محلیِ بازارِ mkt* (نامِ پارامتر برای سازگاری مانده). NY = مسیرِ قدیمی؛ بقیه market-aware.
    datetime t1, t2dummy;
-   ST_ComputeSessionByDaysAgo(daysAgo, nyH, nyM, nyH, nyM, t1, t2dummy);
+   if(mkt == ST_MKT_NY)
+      ST_ComputeSessionByDaysAgo(daysAgo, nyH, nyM, nyH, nyM, t1, t2dummy);
+   else
+      ST_ComputeSessionByDaysAgoMkt(daysAgo - dayOffset, mkt, nyH, nyM, nyH, nyM, t1, t2dummy);
    // v95 (BUG-059): خطوطِ کاملاً بیرون از (چپِ) ناحیه‌ی دیده‌شده‌ی چارت ساخته نمی‌شن - قبلاً همیشه
    // ~۴۵۰ خط + ~۴۵۰ لیبل (۳۲ روز × ۱۴) ساخته می‌شد و هر ChartRedraw رو تا ~۱ ثانیه کند می‌کرد.
    // اسکرول به عقب CHARTEVENT_CHART_CHANGE می‌ده که همین تابع رو دوباره صدا می‌زنه، پس خطوط قدیمی‌تر
@@ -956,12 +973,13 @@ void BuildSessionWindows()
    {
       for(int i=0; i<KEYTIME_LINE_COUNT; i++)
       {
-         int h, m, dayOffset; bool isMain;
-         KeyTime_GetLine(i, h, m, isMain, dayOffset);
+         int h, m, dayOffset, mkt; bool isMain;
+         KeyTime_GetLine(i, h, m, isMain, dayOffset, mkt);
+         if(g_swMode == KEYTIME_MODE_COMPACT && !isMain) continue;   // v107 (FEAT-061): COMPACT = فقط خطوطِ اصلی
          color c = GetKeyTimeLineColor(isMain);
          // dayOffset=1 -> این خط به روز تقویمی نیویورکِ قبل از daysAgo جاری تعلق داره (سشن عصر که
          // از شب قبل شروع می‌شه) - ST_GetNYCalendarDate(daysAgo+1,...) دقیقاً همون یک روز عقب‌تره.
-         BuildOneKeyTimeLine(daysAgo+dayOffset, i, h, m, isMain, c);
+         BuildOneKeyTimeLine(daysAgo+dayOffset, i, h, m, isMain, c, mkt, dayOffset);   // v107: + بازارِ لنگر
       }
    }
    RM_NewsBuild();  // v105: خبرهای USD امروز (فقط از حافظه)
@@ -1014,12 +1032,15 @@ void UpdateSessionWindowsVertical(bool force=false)
 void SaveSessionWindowsState()
 {
    GlobalVariableSet(GV_SW_ON, g_swOn ? 1.0 : 0.0);
+   GlobalVariableSet(GV_SW_MODE, (double)g_swMode);   // v107 (FEAT-061)
 }
 
 void LoadSessionWindowsState()
 {
    if(GlobalVariableCheck(GV_SW_ON))
       g_swOn = (GlobalVariableGet(GV_SW_ON) != 0.0);
+   // v107 (FEAT-061): نبودنِ GV (کاربرِ قدیمی) = FULL = رفتارِ قبلی
+   g_swMode = (GlobalVariableCheck(GV_SW_MODE) && (int)GlobalVariableGet(GV_SW_MODE) == KEYTIME_MODE_COMPACT) ? KEYTIME_MODE_COMPACT : KEYTIME_MODE_FULL;
 }
 
 //+------------------------------------------------------------------+
@@ -1057,9 +1078,11 @@ int      g_slObjCount = 0;
 // است، و چون Session Level سشنِ عبورکننده از نیمه‌شب (Tokyo 20:00->05:00) دارد، فیکسِ
 // عبور-از-نیمه‌شبِ ماژول (end<=start -> +86400) آن را درست هندل می‌کند. امضای این wrapper
 // هم‌شکلِ قبلی نگه داشته شد تا فراخوان‌ها دست‌نخورده بمانند.
-void SessionLevel_ComputeServerTime(int daysAgo, int nyStartH, int nyStartM, int nyEndH, int nyEndM, datetime &outStart, datetime &outEnd)
+// v107 (FEAT-060): + پارامترِ بازار (پیش‌فرض NY = امضای قبلی). ساعت‌ها = ساعتِ محلیِ همان بازار.
+void SessionLevel_ComputeServerTime(int daysAgo, int nyStartH, int nyStartM, int nyEndH, int nyEndM, datetime &outStart, datetime &outEnd, int mkt = ST_MKT_NY)
 {
-   ST_ComputeSessionByDaysAgo(daysAgo, nyStartH, nyStartM, nyEndH, nyEndM, outStart, outEnd);
+   if(mkt == ST_MKT_NY) ST_ComputeSessionByDaysAgo(daysAgo, nyStartH, nyStartM, nyEndH, nyEndM, outStart, outEnd);
+   else                 ST_ComputeSessionByDaysAgoMkt(daysAgo, mkt, nyStartH, nyStartM, nyEndH, nyEndM, outStart, outEnd);
 }
 
 // v58 (Session-entry tagging): مشخص می‌کنه لحظه‌ی ورود یه معامله (زمان سرور - مثلاً
@@ -1079,6 +1102,8 @@ void SessionLevel_ComputeServerTime(int daysAgo, int nyStartH, int nyStartM, int
 // پیاده‌سازی: زمان سرور -> UTC -> وقت نیویورک (دقیقه‌ی روز)، بعد عضویت در هر سه بازه (Tokyo با
 // رد از نیمه‌شب) چک می‌شه. برای قانون همپوشانی، "چند دقیقه از شروع اسمی هر سشنِ فعال گذشته"
 // حساب می‌شه - کمترین فاصله = دیرتر (جدیدتر) شروع شده = همون سشنی که باید برگرده.
+// TODO v108 (FEAT-060 Phase B): این تگ هنوز مرزهای NY-محورِ v57 را دارد (Tokyo 20:00-05:00 NY، London 03:00-12:00 NY) و با باکس‌های
+// market-aware جدید (Tokyo 00-09 UTC، London 08-17 London) یکی نیست. عمداً در v107 دست نخورد؛ ردیف‌های قدیمیِ CSV هرگز بازنویسی نمی‌شوند.
 string SessionLevel_TagForTime(datetime serverTime)
 {
    // v78: آفستِ خامِ TimeCurrent()-TimeGMT() (که در سکوتِ تیک drift می‌کرد) با آفستِ
@@ -1167,10 +1192,10 @@ int SessionLevel_LaneForLabel(string label)
 
 // daysAgo می‌تونه منفی باشه (روز آینده) - ببین SessionLevel_GetNYDate بالا.
 datetime g_slCullTime = 0;  // v95: مرز چپ ساخت باکس‌های Session Level (۰ = بدون محدودیت)
-void SessionLevel_BuildOneBox(int daysAgo, string label, int sh, int sm, int eh, int em, color c)
+void SessionLevel_BuildOneBox(int daysAgo, string label, int sh, int sm, int eh, int em, color c, int mkt = ST_MKT_NY)
 {
    datetime t1, t2;
-   SessionLevel_ComputeServerTime(daysAgo, sh, sm, eh, em, t1, t2);
+   SessionLevel_ComputeServerTime(daysAgo, sh, sm, eh, em, t1, t2, mkt);   // v107: بازارِ لنگر
    if(g_slCullTime > 0 && t2 < g_slCullTime) return;  // v95 (BUG-059): باکس‌های کاملاً چپِ ناحیه‌ی دیده‌شده ساخته نمی‌شن
    SessionLevel_EnsureChartShift(t2);  // BUG-046 fix - قبل از ساخت/آپدیت هر آبجکتی که ممکنه فراتر از Time[0] باشه
 
@@ -1238,9 +1263,11 @@ void SessionLevel_BuildWindows()
 
    for(int daysAgo=-1; daysAgo<=SESSLVL_HISTORY_DAYS; daysAgo++)
    {
-      SessionLevel_BuildOneBox(daysAgo, "Tokyo",   20,0, 5,0,  boxColor);
-      SessionLevel_BuildOneBox(daysAgo, "London",   3,0, 12,0, boxColor);
-      SessionLevel_BuildOneBox(daysAgo, "NewYork",  9,0, 18,0, boxColor);
+      // v107 (FEAT-060): ساعتِ محلیِ هر بازار، DSTِ خودش (per-day): Tokyo 09:00-18:00 JST (= 00:00-09:00 UTC)،
+      // London 08:00-17:00 لندن (EU rule)، NewYork 09:00-18:00 نیویورک (US rule).
+      SessionLevel_BuildOneBox(daysAgo, "Tokyo",    9,0, 18,0, boxColor, ST_MKT_TOKYO);
+      SessionLevel_BuildOneBox(daysAgo, "London",   8,0, 17,0, boxColor, ST_MKT_LONDON);
+      SessionLevel_BuildOneBox(daysAgo, "NewYork",  9,0, 18,0, boxColor, ST_MKT_NY);
    }
    ChartRedraw();
 }
@@ -2006,7 +2033,7 @@ void LoadStrategySetupsFile()
 // اگه فایل هنوز وجود نداره (اولین اجرا)، با seed مشخص‌شده در تسک ساخته می‌شه؛ در غیر این صورت
 // فقط لود می‌شه (افزودن‌های قبلی تریدر دست‌نخورده می‌مونن - این تابع هیچ‌وقت overwrite نمی‌کنه
 // اگه فایل از قبل باشه).
-#define STRAT_LIST_VERSION      106   // v106 (STRAT-LIST): 80 -> 106؛ مهاجرت یک‌باره‌ی لیست (با بکاپ) روی هر ترمینال
+#define STRAT_LIST_VERSION      107   // v107 (FEAT-062): 106 -> 107 (فقط افزودنِ TR-BREAKOUT)؛ v106: 80 -> 106؛ مهاجرت یک‌باره (با بکاپ) روی هر ترمینال
 #define GV_STRAT_LIST_VERSION   "RM_StratListVer"   // ترمینال‌محور (نه حساب‌محور): فایل هم مشترک بین حساب‌های همین ترمینال است
 
 // لیست پیش‌فرض (v80، BUG-056) - تنها منبع؛ هم seed اولیه هم مهاجرت یک‌باره از این می‌نویسن.
@@ -2019,7 +2046,8 @@ void WriteDefaultStrategySetups()
       return;
    }
    // v106 (STRAT-LIST): لیست جدید (۴ استراتژی)، جایگزین ۶ خط قبلی
-   FileWrite(handle, "CYCLE_MATURITY: REJECTION_CANDLE, MTR_PB, MTR_LINE_BREAK, MTR_BREAKEVEN_RETEST");
+   // v107 (FEAT-062): TR-BREAKOUT پنجمین Setupِ CYCLE_MATURITY (املا دقیقاً «TR-BREAKOUT»)
+   FileWrite(handle, "CYCLE_MATURITY: REJECTION_CANDLE, MTR_PB, MTR_LINE_BREAK, MTR_BREAKEVEN_RETEST, TR-BREAKOUT");
    FileWrite(handle, "SPIKE_TRADING: BREAKOUT_CANDLE, SP2L_FIRST_PB_CANDLE, SP2L_50, BTB");
    FileWrite(handle, "CHANNEL_TRADING: TREND_LINE_TOUCH, PREVIOUS_LEG_50, REJECTION_CANDLE");
    FileWrite(handle, "RANGE_TRADING: EDGE_LIMIT, REJECTION_CANDLE");
@@ -2030,9 +2058,11 @@ void WriteDefaultStrategySetups()
 // از v80 است (یعنی هنوز لیست قبلی) -> *یک‌بار* با لیست جدید جایگزین می‌شه (نسخه‌ی قبلی به
 // RM_StrategySetups_backup.txt کپی می‌شه) و GV ثبت می‌شه. از اون به بعد ادیت‌های دستی دست‌نخورده
 // می‌مونن (مثل رفتار عمدی v56 - هیچ‌وقت هر اجرا overwrite نمی‌کنه).
+void AddSetupIfMissing(string stratName, string setupName);   // v107: forward declaration (تعریف پایین‌تر در همین فایل)
 void EnsureStrategySetupsSeed()
 {
-   bool haveVer = GlobalVariableCheck(GV_STRAT_LIST_VERSION) && (int)GlobalVariableGet(GV_STRAT_LIST_VERSION) >= STRAT_LIST_VERSION;
+   int  storedVer = GlobalVariableCheck(GV_STRAT_LIST_VERSION) ? (int)GlobalVariableGet(GV_STRAT_LIST_VERSION) : 0;   // v107
+   bool haveVer = (storedVer >= STRAT_LIST_VERSION);
 
    if(!FileIsExist(STRAT_FILE_NAME))
    {
@@ -2043,9 +2073,20 @@ void EnsureStrategySetupsSeed()
    {
       if(!FileCopy(STRAT_FILE_NAME, 0, "RM_StrategySetups_backup.txt", FILE_REWRITE))
          Print("RM_Tools: strategy list backup failed, error ", GetLastError());
-      WriteDefaultStrategySetups();
+      if(storedVer >= 106)
+      {
+         // v107 (FEAT-062): فایل از قبل لیستِ v106 (قابل‌ویرایش توسط کاربر) است - فقط ردیفِ جدیدِ TR-BREAKOUT اضافه می‌شود؛
+         // هیچ ویرایشِ کاربر overwrite نمی‌شود (بکاپ بالا قبل از هر تغییر نوشته شد).
+         LoadStrategySetupsFile();
+         AddSetupIfMissing("CYCLE_MATURITY", "TR-BREAKOUT");
+         Print("RM_Tools: strategy list migrated to v", STRAT_LIST_VERSION, " (added TR-BREAKOUT only; backup in RM_StrategySetups_backup.txt)");
+      }
+      else
+      {
+         WriteDefaultStrategySetups();
+         Print("RM_Tools: strategy list migrated to v", STRAT_LIST_VERSION, " default (old file backed up to RM_StrategySetups_backup.txt)");
+      }
       GlobalVariableSet(GV_STRAT_LIST_VERSION, STRAT_LIST_VERSION);
-      Print("RM_Tools: strategy list migrated to v", STRAT_LIST_VERSION, " default (old file backed up to RM_StrategySetups_backup.txt)");
    }
    LoadStrategySetupsFile();
 }

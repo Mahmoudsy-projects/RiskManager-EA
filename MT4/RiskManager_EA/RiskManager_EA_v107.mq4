@@ -982,6 +982,9 @@
 //|   RM_Tools/RM_Snapshot/RM_CooldownEngine/RM_Reports.              |
 //|   v95: BUG-059 - candle timer/session vertical sync throttled + SLOWSTEP diag. v94: UpdateRiskDisplay redraws only when its text changes (BUG-059).|
 //|   v93: + per-section OnTick breakdown ([RM-PERF] TICK BREAKDOWN). |
+//|   v107: FEAT-060 market-anchored automatic DST for Key Time/Session|
+//|   boxes (per-day server offset; NOT COMPILED); FEAT-061 Key Time  |
+//|   FULL/COMPACT; FEAT-062 TR-BREAKOUT default setup. CHANGELOG_v107.md|
 //|   v106: FEAT-047 Key Time line intensity input; BUG-062 Measure   |
 //|   Move uses the owner's own Fibo levels (thin solid, click order);|
 //|   STRAT-LIST new strategy/setup default list. See CHANGELOG_v106.md|
@@ -1006,7 +1009,7 @@
 //|   MagicNumber and base sizing untouched.                          |
 //+------------------------------------------------------------------+
 #property copyright "Risk Manager EA"
-#property version   "106.00"
+#property version   "107.00"
 // v45 (Punch List Round 3, Item 7): custom icon embedded straight into the compiled .ex4 - shows
 // up in the Navigator panel and the Properties/About dialog. RiskManager.ico must sit next to this
 // .mq4 at compile time only; after that it's baked into the .ex4, no external file needed at runtime.
@@ -2589,11 +2592,14 @@ void RM_OnChartEventImpl(const int id, const long &lp, const double &dp, const s
       // does its own no-op/cleanup when g_swOn is false, same idempotent shape as the other tools.
       if(sp == P+"BTN_SW")
       {
-         g_swOn = !g_swOn;
+         // v107 (FEAT-061): چرخه‌ی سه‌حالتی روی همان دکمه: OFF -> ON (FULL) -> COMPACT -> OFF. کلیکِ اول از OFF همان رفتارِ قبلی (FULL).
+         if(!g_swOn)                               { g_swOn = true;  g_swMode = KEYTIME_MODE_FULL; }
+         else if(g_swMode == KEYTIME_MODE_FULL)    { g_swMode = KEYTIME_MODE_COMPACT; }
+         else                                      { g_swOn = false; g_swMode = KEYTIME_MODE_FULL; }
          SaveSessionWindowsState();
          BuildSessionWindows();  // ON: (re)builds today + history; OFF: BuildSessionWindows() calls RemoveSessionWindows() and returns
          UpdateSWButton();
-         SetStatus(g_swOn ? "Key Time: ON" : "Key Time: OFF", C'150,160,180');  // v57.1: متن وضعیت هم‌راستا با کپشن جدید دکمه شد
+         SetStatus(g_swOn ? (g_swMode == KEYTIME_MODE_COMPACT ? "Key Time: ON (COMPACT)" : "Key Time: ON (FULL)") : "Key Time: OFF", C'150,160,180');  // v57.1: متن وضعیت هم‌راستا با کپشن جدید دکمه شد
       }
       // v57: Session Level toggle - همون الگوی click-toggle + GlobalVariable persistence که
       // Session Windows/Candle Timer/Daily H/L استفاده می‌کنن (یه display preference‌ه، نه یه
