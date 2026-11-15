@@ -956,12 +956,16 @@ void BuildPanel()
          // v57.4 (فیدبک Mahmoud): این ردیف حالا SESSION | KEY TIME رو نشون می‌ده - BTN_MARKERS به
          // Row 3 بالا منتقل شد (جاش رو با BTN_SW عوض کردیم). کپشن Session Level هم از "SESS LVL"
          // به "SESSION" ساده شد.
-         BtnC(P+"BTN_SESSLVL", bx, cy, toolsHalfW1, TOOLS_ROW_H, "SESSION",
-              g_sessLvlOn ? C'0,150,150' : C'70,70,80', corner, 7);
-         FitBtnFontHalf(P+"BTN_SESSLVL", "SESSION", toolsHalfW1, 7);
-         BtnC(P+"BTN_SW", bx+toolsHalfW1+GP, cy, toolsHalfW2, TOOLS_ROW_H, "KEY TIME",
-              g_swOn ? C'0,150,150' : C'70,70,80', corner, 7);
-         FitBtnFontHalf(P+"BTN_SW", "KEY TIME", toolsHalfW2, 7);
+         // v107 (FEAT-063): EXPANDED = کپشنِ «SESSION E» + رنگِ آبی‌-سبز؛ COMPACT دقیقاً مثلِ قبل (۱ = SL_MODE_EXPANDED؛ ماکرو در RM_Tools بعد از این فایل است)
+         string slCap = (g_sessLvlOn && g_slMode == 1) ? "SESSION E" : "SESSION";
+         BtnC(P+"BTN_SESSLVL", bx, cy, toolsHalfW1, TOOLS_ROW_H, slCap,
+              g_sessLvlOn ? ((g_slMode == 1) ? C'0,110,170' : C'0,150,150') : C'70,70,80', corner, 7);
+         FitBtnFontHalf(P+"BTN_SESSLVL", slCap, toolsHalfW1, 7);
+         // v107 (FEAT-061): (۱ = KEYTIME_MODE_COMPACT؛ ماکرو در RM_Tools بعد از این فایل تعریف می‌شود) COMPACT = کپشنِ «KEY TIME C» + رنگِ آبی‌-سبزِ متفاوت؛ FULL دقیقاً مثلِ قبل
+         string swCap = (g_swOn && g_swMode == 1) ? "KEY TIME C" : "KEY TIME";
+         BtnC(P+"BTN_SW", bx+toolsHalfW1+GP, cy, toolsHalfW2, TOOLS_ROW_H, swCap,
+              g_swOn ? ((g_swMode == 1) ? C'0,110,170' : C'0,150,150') : C'70,70,80', corner, 7);
+         FitBtnFontHalf(P+"BTN_SW", swCap, toolsHalfW2, 7);
          cy += TOOLS_ROW_H + GP;
       }
 
@@ -1124,8 +1128,10 @@ void UpdateHistoryButton()
 void UpdateSWButton()
 {
    if(ObjectFind(0,P+"BTN_SW")<0) return;
-   ObjectSetInteger(0,P+"BTN_SW",OBJPROP_BGCOLOR, g_swOn?C'0,150,150':C'70,70,80');
-   ObjectSetString (0,P+"BTN_SW",OBJPROP_TEXT,   "KEY TIME");
+   // v107 (FEAT-061): حالتِ COMPACT = کپشن/رنگِ متفاوت (فونتِ دکمه از ساختِ اولیه می‌ماند؛ «KEY TIME C» فقط ۲ کاراکتر بلندتر است)
+   bool swCompact = (g_swOn && g_swMode == 1);
+   ObjectSetInteger(0,P+"BTN_SW",OBJPROP_BGCOLOR, g_swOn ? (swCompact ? C'0,110,170' : C'0,150,150') : C'70,70,80');
+   ObjectSetString (0,P+"BTN_SW",OBJPROP_TEXT,   swCompact ? "KEY TIME C" : "KEY TIME");
    ChartRedraw();
 }
 
@@ -1134,8 +1140,9 @@ void UpdateSWButton()
 void UpdateSessLvlButton()
 {
    if(ObjectFind(0,P+"BTN_SESSLVL")<0) return;
-   ObjectSetInteger(0,P+"BTN_SESSLVL",OBJPROP_BGCOLOR, g_sessLvlOn?C'0,150,150':C'70,70,80');
-   ObjectSetString (0,P+"BTN_SESSLVL",OBJPROP_TEXT,   "SESSION");
+   bool slExp = (g_sessLvlOn && g_slMode == 1);   // v107 (FEAT-063)
+   ObjectSetInteger(0,P+"BTN_SESSLVL",OBJPROP_BGCOLOR, g_sessLvlOn ? (slExp ? C'0,110,170' : C'0,150,150') : C'70,70,80');
+   ObjectSetString (0,P+"BTN_SESSLVL",OBJPROP_TEXT,   slExp ? "SESSION E" : "SESSION");
    ChartRedraw();
 }
 
