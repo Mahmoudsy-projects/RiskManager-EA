@@ -20,6 +20,6 @@ A risk-management and trade-discipline toolkit for MetaTrader. It is **not** a t
 - `docs/reports/` — delivery reports.
 
 ## Tags
-`mt4-v106`, `hub-v1.17`
+`mt4-v107`, `hub-v1.18`
 
 Personal data (trade journals/CSV, logs, account numbers, personal `.set` files) must never be committed; see `.gitignore`.
