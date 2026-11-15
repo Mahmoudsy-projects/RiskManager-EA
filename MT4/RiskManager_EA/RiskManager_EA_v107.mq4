@@ -982,6 +982,7 @@
 //|   RM_Tools/RM_Snapshot/RM_CooldownEngine/RM_Reports.              |
 //|   v95: BUG-059 - candle timer/session vertical sync throttled + SLOWSTEP diag. v94: UpdateRiskDisplay redraws only when its text changes (BUG-059).|
 //|   v93: + per-section OnTick breakdown ([RM-PERF] TICK BREAKDOWN). |
+//|   v107: FEAT-063 SESSION expanded High-Low boxes (see changelog).  |
 //|   v107: FEAT-060 market-anchored automatic DST for Key Time/Session|
 //|   boxes (per-day server offset; NOT COMPILED); FEAT-061 Key Time  |
 //|   FULL/COMPACT; FEAT-062 TR-BREAKOUT default setup. CHANGELOG_v107.md|
@@ -2606,11 +2607,14 @@ void RM_OnChartEventImpl(const int id, const long &lp, const double &dp, const s
       // مقدار ریسک/بالانس). SessionLevel_BuildWindows() خودش idempotent پاک‌سازی می‌کنه وقتی خاموشه.
       if(sp == P+"BTN_SESSLVL")
       {
-         g_sessLvlOn = !g_sessLvlOn;
+         // v107 (FEAT-063): چرخه‌ی سه‌حالتی: OFF -> COMPACT (نوارِ قبلی) -> EXPANDED (High..Low روی چارت) -> OFF
+         if(!g_sessLvlOn)                           { g_sessLvlOn = true;  g_slMode = SL_MODE_COMPACT; }
+         else if(g_slMode == SL_MODE_COMPACT)       { g_slMode = SL_MODE_EXPANDED; }
+         else                                       { g_sessLvlOn = false; g_slMode = SL_MODE_COMPACT; }
          SessionLevel_SaveState();
          SessionLevel_BuildWindows();
          UpdateSessLvlButton();
-         SetStatus(g_sessLvlOn ? "Session Level: ON" : "Session Level: OFF", C'150,160,180');
+         SetStatus(g_sessLvlOn ? (g_slMode == SL_MODE_EXPANDED ? "Session Level: ON (EXPANDED)" : "Session Level: ON (COMPACT)") : "Session Level: OFF", C'150,160,180');
       }
       // v57: Entry/Exit Markers toggle - همون الگو. BuildEntryExitMarkers() خودش idempotent
       // پاک‌سازی می‌کنه وقتی خاموشه.

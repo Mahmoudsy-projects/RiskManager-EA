@@ -1060,6 +1060,15 @@ void LoadSessionWindowsState()
 // این منطق (توابع SessionLevel_*) طبق تسک عمداً generic/reusable نگه داشته شده - قراره در v58
 // (Session-entry tagging) هم مستقیماً صدا زده بشه، پس این‌جا (داخل خود EA، نه یه indicator جدا)
 // می‌مونه.
+// v107 (FEAT-063): حالتِ نمایشِ SESSION - 0=COMPACT (نوارِ باریکِ پایین، رفتارِ قبلی)، 1=EXPANDED (باکسِ High..Low روی کندل‌ها).
+// چرخه با همان دکمه: OFF -> COMPACT -> EXPANDED -> OFF. در GV ذخیره می‌شود؛ نبودنِ GV = COMPACT.
+#define  SL_MODE_COMPACT   0
+#define  SL_MODE_EXPANDED  1
+#define  SL_EXP_BLEND_PCT  30           // v107: درصدِ رنگِ سشن روی بک‌گراند (MT4 آلفا ندارد؛ «شفافیت» = ترکیبِ رنگ با بک‌گراند)
+#define  SL_HL_TF          PERIOD_M15   // تایم‌فریمِ محاسبه‌ی High/Low سشن (مستقل از TFِ چارت؛ مثلِ M5ِ SOB در Hub)
+int      g_slMode = SL_MODE_COMPACT;
+string   GV_SESSLVL_MODE = "RM_SessLvlMode_" + Symbol();
+datetime g_slLastHLBar = 0;             // آخرین کندلِ M15ی که EXPANDED با آن ساخته شد (بازسازی فقط با کندلِ جدید، نه هر تیک)
 bool     g_sessLvlOn = false;  // Session Level toggle - dashboard-driven, persisted via GlobalVariable (GV_SESSLVL_ON)
 string   GV_SESSLVL_ON = "RM_SessLvlOn_" + Symbol();
 #define  SESSLVL_HISTORY_DAYS 30   // ~1 month تاریخچه برای بک‌تست دستی روی چارت - هم‌راستا با SW_HISTORY_DAYS بالا
@@ -1190,6 +1199,44 @@ int SessionLevel_LaneForLabel(string label)
    return 0;  // NewYork (یا هر لیبل ناشناخته‌ی دیگه، ایمن)
 }
 
+// v107 (FEAT-063): High/Low واقعیِ بازه‌ی [t1,t2) (تا «الان» اگر سشن هنوز تمام نشده) از کندل‌های SL_HL_TF.
+// false = سشن هنوز شروع نشده / دیتای تاریخچه کافی نیست -> باکس ساخته نمی‌شود (مثلِ گاردِ M5ِ Hub).
+bool SessionLevel_GetHL(datetime t1, datetime t2, double &hi, double &lo)
+{
+   datetime nowT = TimeCurrent();
+   if(t1 >= nowT) return(false);
+   int bars = iBars(Symbol(), SL_HL_TF);
+   if(bars <= 0) return(false);
+   if(iTime(Symbol(), SL_HL_TF, bars - 1) > t1) return(false);
+   datetime tEnd = (t2 < nowT) ? t2 : nowT;
+   int sOld = iBarShift(Symbol(), SL_HL_TF, t1, false);       // اندیسِ بزرگ‌تر = قدیمی‌تر
+   int sNew = iBarShift(Symbol(), SL_HL_TF, tEnd - 1, false);
+   if(sOld < 0 || sNew < 0) return(false);
+   if(sOld > sNew && iTime(Symbol(), SL_HL_TF, sOld) < t1) sOld--;   // کندلِ قبل از شروع (شکافِ بازار) حساب نشود
+   if(sOld < sNew) return(false);
+   int cnt = sOld - sNew + 1;
+   int ih = iHighest(Symbol(), SL_HL_TF, MODE_HIGH, cnt, sNew);
+   int il = iLowest (Symbol(), SL_HL_TF, MODE_LOW,  cnt, sNew);
+   if(ih < 0 || il < 0) return(false);
+   hi = iHigh(Symbol(), SL_HL_TF, ih);
+   lo = iLow (Symbol(), SL_HL_TF, il);
+   return(hi > lo);
+}
+
+// رنگِ EXPANDED: توکیو زرد، لندن سبز، نیویورک آبی - ترکیب‌شده با بک‌گراندِ چارت (باکس پشتِ کندل‌هاست).
+color SessionLevel_ExpandedColor(string label, bool forText)
+{
+   color base = (label=="Tokyo") ? clrYellow : ((label=="London") ? clrLimeGreen : clrDodgerBlue);
+   if(forText) return(base);
+   color bg = (color)ChartGetInteger(0, CHART_COLOR_BACKGROUND);
+   int bR=(int)(bg&0xFF), bG=(int)((bg>>8)&0xFF), bB=(int)((bg>>16)&0xFF);
+   int fR=(int)(base&0xFF), fG=(int)((base>>8)&0xFF), fB=(int)((base>>16)&0xFF);
+   int r = bR + (int)((fR-bR)*SL_EXP_BLEND_PCT/100.0);
+   int g = bG + (int)((fG-bG)*SL_EXP_BLEND_PCT/100.0);
+   int b = bB + (int)((fB-bB)*SL_EXP_BLEND_PCT/100.0);
+   return((color)(r | (g<<8) | (b<<16)));
+}
+
 // daysAgo می‌تونه منفی باشه (روز آینده) - ببین SessionLevel_GetNYDate بالا.
 datetime g_slCullTime = 0;  // v95: مرز چپ ساخت باکس‌های Session Level (۰ = بدون محدودیت)
 void SessionLevel_BuildOneBox(int daysAgo, string label, int sh, int sm, int eh, int em, color c, int mkt = ST_MKT_NY)
@@ -1197,6 +1244,7 @@ void SessionLevel_BuildOneBox(int daysAgo, string label, int sh, int sm, int eh,
    datetime t1, t2;
    SessionLevel_ComputeServerTime(daysAgo, sh, sm, eh, em, t1, t2, mkt);   // v107: بازارِ لنگر
    if(g_slCullTime > 0 && t2 < g_slCullTime) return;  // v95 (BUG-059): باکس‌های کاملاً چپِ ناحیه‌ی دیده‌شده ساخته نمی‌شن
+   if(g_slMode == SL_MODE_EXPANDED) { SessionLevel_BuildOneBoxExpanded(daysAgo, label, t1, t2); return; }   // v107 (FEAT-063)
    SessionLevel_EnsureChartShift(t2);  // BUG-046 fix - قبل از ساخت/آپدیت هر آبجکتی که ممکنه فراتر از Time[0] باشه
 
    string boxName = SESSLVL_BOX_PREFIX + label + "_" + IntegerToString(daysAgo);
@@ -1239,6 +1287,51 @@ void SessionLevel_BuildOneBox(int daysAgo, string label, int sh, int sm, int eh,
    g_slObjCount++;
 }
 
+// v107 (FEAT-063): حالتِ EXPANDED - باکسِ پرِ High..Low سشن روی چارت (پشتِ کندل‌ها)، رنگِ هر سشن جدا. اسمِ آبجکت‌ها و
+// آرایه‌های ردیابی همان قبلی؛ lane=-1 یعنی «قیمتِ ثابت» (UpdateVertical دستش نمی‌زند).
+void SessionLevel_BuildOneBoxExpanded(int daysAgo, string label, datetime t1, datetime t2)
+{
+   double hi, lo;
+   if(!SessionLevel_GetHL(t1, t2, hi, lo)) return;
+   SessionLevel_EnsureChartShift(t2);
+   string boxName = SESSLVL_BOX_PREFIX + label + "_" + IntegerToString(daysAgo);
+   string lblName = SESSLVL_LBL_PREFIX + label + "_" + IntegerToString(daysAgo);
+   color  cBox = SessionLevel_ExpandedColor(label, false);
+   color  cTxt = SessionLevel_ExpandedColor(label, true);
+
+   if(ObjectFind(0,boxName)<0) ObjectCreate(0,boxName,OBJ_RECTANGLE,0,t1,lo,t2,hi);
+   ObjectSetInteger(0,boxName,OBJPROP_TIME1,  t1);
+   ObjectSetInteger(0,boxName,OBJPROP_TIME2,  t2);
+   ObjectSetDouble (0,boxName,OBJPROP_PRICE1, lo);
+   ObjectSetDouble (0,boxName,OBJPROP_PRICE2, hi);
+   ObjectSetInteger(0,boxName,OBJPROP_COLOR,  cBox);
+   ObjectSetInteger(0,boxName,OBJPROP_FILL,   true);
+   ObjectSetInteger(0,boxName,OBJPROP_BACK,   true);
+   ObjectSetInteger(0,boxName,OBJPROP_SELECTABLE, false);
+   ObjectSetInteger(0,boxName,OBJPROP_WIDTH,  1);
+   ObjectSetInteger(0,boxName,OBJPROP_STYLE,  STYLE_SOLID);
+
+   datetime tMid = t1 + (t2-t1)/2;
+   if(ObjectFind(0,lblName)<0) ObjectCreate(0,lblName,OBJ_TEXT,0,tMid,hi);
+   ObjectSetInteger(0,lblName,OBJPROP_TIME,  tMid);
+   ObjectSetDouble (0,lblName,OBJPROP_PRICE, hi);
+   ObjectSetString (0,lblName,OBJPROP_TEXT,  label);
+   ObjectSetInteger(0,lblName,OBJPROP_COLOR, cTxt);
+   ObjectSetInteger(0,lblName,OBJPROP_FONTSIZE, 7);
+   ObjectSetString (0,lblName,OBJPROP_FONT,  "Arial Bold");
+   ObjectSetInteger(0,lblName,OBJPROP_ANCHOR, ANCHOR_LOWER);
+   ObjectSetInteger(0,lblName,OBJPROP_SELECTABLE, false);
+   ObjectSetInteger(0,lblName,OBJPROP_BACK,   false);
+
+   ArrayResize(g_slBoxNames, g_slObjCount+1);
+   ArrayResize(g_slLblNames, g_slObjCount+1);
+   ArrayResize(g_slLane,     g_slObjCount+1);
+   g_slBoxNames[g_slObjCount] = boxName;
+   g_slLblNames[g_slObjCount] = lblName;
+   g_slLane[g_slObjCount]     = -1;
+   g_slObjCount++;
+}
+
 // v57.1 (فیدبک Mahmoud - محدوده‌ها): سه بازه‌ی جدید - Tokyo 20:00->05:00 (از نیمه‌شب رد می‌شه)،
 // London 03:00->12:00، New York 09:00->18:00 (همه به وقت نیویورک). daysAgo از -1 (فردا - تا
 // سشن‌های هنوز-شروع‌نشده‌ی نزدیک لبه‌ی نیمه‌شب از قبل آماده باشن) تا SESSLVL_HISTORY_DAYS
@@ -1259,6 +1352,7 @@ void SessionLevel_BuildWindows()
    // با کنتراست خودکار در برابر بک‌گراند از قبل داخل ResolveFiboLineColor()) استفاده می‌شه - نه
    // GetFiboRRColor() (بولیش) که Key Time استفاده می‌کنه - تا این دو ابزار همیشه رنگ متفاوت داشته
    // باشن، بدون کد جدید برای منطق کنتراست (از قبل موجوده و امتحان‌پس‌داده).
+   g_slLastHLBar = iTime(Symbol(), SL_HL_TF, 0);   // v107 (FEAT-063)
    color boxColor = GetSessionLevelBoxColor();  // v84: رنگ قبلی عیناً حفظ شد (GetFiboMeasureColor حالا خاکستری ثابت Measure Move است)
 
    for(int daysAgo=-1; daysAgo<=SESSLVL_HISTORY_DAYS; daysAgo++)
@@ -1291,6 +1385,14 @@ void SessionLevel_UpdateVertical()
          if(slLt > 0 && slLt - 86400 < g_slCullTime) { SessionLevel_BuildWindows(); return; }
       }
    }
+   // v107 (FEAT-063): EXPANDED - باکس‌ها قیمتِ واقعی دارند (نه لِین)؛ فقط وقتی کندلِ M15 جدید آمد (ریسکِ پایین، نه هر تیک)
+   // High/Low سشنِ در جریان دوباره ساخته می‌شود. بدونِ تغییرِ کندل هیچ کاری نمی‌کند.
+   if(g_slMode == SL_MODE_EXPANDED)
+   {
+      datetime hlBar = iTime(Symbol(), SL_HL_TF, 0);
+      if(hlBar != g_slLastHLBar) SessionLevel_BuildWindows();
+      return;
+   }
    double laneTop[3] = {0,0,0}, laneBot[3] = {0,0,0};  // v57.3 (فیکس هشدار کامپایلر): مقداردهی اولیه‌ی صریح - GetSessionLevelPriceRange() همیشه هر دو خروجی رو قبل از استفاده پر می‌کنه، ولی کامپایلر بدون این مقداردهی اولیه نمی‌تونه اینو در حلقه‌ی زیر تشخیص بده
    for(int L=0; L<3; L++) GetSessionLevelPriceRange(L, laneTop[L], laneBot[L]);
    for(int i=0; i<g_slObjCount; i++)
@@ -1310,12 +1412,15 @@ void SessionLevel_UpdateVertical()
 void SessionLevel_SaveState()
 {
    GlobalVariableSet(GV_SESSLVL_ON, g_sessLvlOn ? 1.0 : 0.0);
+   GlobalVariableSet(GV_SESSLVL_MODE, (double)g_slMode);   // v107 (FEAT-063)
 }
 
 void SessionLevel_LoadState()
 {
    if(GlobalVariableCheck(GV_SESSLVL_ON))
       g_sessLvlOn = (GlobalVariableGet(GV_SESSLVL_ON) != 0.0);
+   // v107 (FEAT-063): نبودنِ GV = COMPACT = رفتارِ قبلی
+   g_slMode = (GlobalVariableCheck(GV_SESSLVL_MODE) && (int)GlobalVariableGet(GV_SESSLVL_MODE) == SL_MODE_EXPANDED) ? SL_MODE_EXPANDED : SL_MODE_COMPACT;
 }
 
 //+------------------------------------------------------------------+

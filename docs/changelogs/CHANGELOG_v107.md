@@ -23,3 +23,7 @@ Base: EA v106.00 + Hub 1.17 → EA v107.00 (`RiskManager_EA_v107.mq4`) + Hub 1.1
 
 ## فایل‌های تغییرکرده
 `RM_SessionTime.mqh`، `RM_Tools.mqh`، `RM_Dashboard.mqh` (کپشن/رنگِ دکمه)، `RiskManager_EA_v107.mq4` (نسخه، هندلرِ BTN_SW)، `MT4/MQL4_Files/RM_StrategySetups.txt` (نمونه‌ی پیش‌فرض). بقیه‌ی فایل‌ها MD5-identical با v106.
+
+## FEAT-063 — SESSION حالت EXPANDED
+دکمه‌ی SESSION سه‌حالتی: OFF → COMPACT (نوار پایین، مثل قبل) → EXPANDED → OFF. حالت در GV `RM_SessLvlMode_<symbol>` (نبودن = COMPACT).
+EXPANDED: برای هر سشن یک باکس از High تا Low واقعی سشن (از کندل‌های M15) پشتِ کندل‌ها؛ توکیو زرد، لندن سبز، نیویورک آبی. MT4 آلفا ندارد، پس «شفافیت» = ترکیب رنگ با بک‌گراند (`SL_EXP_BLEND_PCT`=30 بالای بلوک Session Level). سشنِ در جریان فقط با آمدنِ کندل M15 جدید بازسازی می‌شود (نه هر تیک). سشنِ شروع‌نشده یا بدون دیتای کافی رسم نمی‌شود. ساعت‌های سشن همان market-aware v107.
