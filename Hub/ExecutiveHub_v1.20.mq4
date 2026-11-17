@@ -25,6 +25,7 @@
 //|    ماژول ۲: Session Opening Box + NY Edge (موتور تایم‌زون مشترک)     |
 //|    ماژول ۳: MTF Candle Preview + EMA Overlay                        |
 //+------------------------------------------------------------------+
+//--- v1.20: SOB_CurrentDayOnly now draws only the newest started box per session (1.19 showed today + previous day).
 //--- v1.19: fix - SOB loop starts at d=-1 so "today's Tokyo box" shows between 00:00 UTC and NY midnight (it was skipped in 1.18). No other change vs 1.18.
 //--- v1.18 (FEAT-060, NOT COMPILED): market-anchored automatic DST. SOB inputs are now in each MARKET's LOCAL time (Tokyo JST, London, New York); shared RM_SessionTime.mqh adds EU/AU DST + per-day server offset. NY Edge 09:00-18:00 NY unchanged.
 //--- v1.17 (FEAT-052): 4th master button "Theme" + drawer of 7 chart colour themes and "Original" (one-shot, per chart); Hub-drawn objects get automatic contrast on any theme.
@@ -39,7 +40,7 @@
 #property description "Drawn shapes/labels are independent, selectable chart"
 #property description "objects that persist even if this indicator is removed -"
 #property description "delete them manually if needed."
-#property version   "1.19"
+#property version   "1.20"
 #property strict
 #property indicator_chart_window
 #property indicator_buffers 7
@@ -1717,16 +1718,19 @@ void SOB_ProcessSession(string sessionName, string startStr, string endStr, colo
    {
       datetime boxStart, boxEnd;
       ST_ComputeSessionByDaysAgoMkt(d, mkt, sh, sm, eh, em, boxStart, boxEnd);   // v1.18 (FEAT-060): market-aware (NY = مسیرِ قبلی)
-      SOB_ProcessOneDay(sessionName, boxStart, boxEnd, col, d);
+      bool drawn = SOB_ProcessOneDay(sessionName, boxStart, boxEnd, col, d);
+      // v1.20: SOB_CurrentDayOnly = فقط «آخرین» باکسِ شروع‌شده‌ی هر سشن (امروز؛ اگر امروز هنوز شروع نشده، آخرین روزِ دارای دیتا)
+      // و بعد توقف - قبلاً با d=-1 دو باکس (امروز + روز قبل) دیده می‌شد.
+      if(SOB_CurrentDayOnly && drawn) break;
    }
 }
 
-void SOB_ProcessOneDay(string sessionName, datetime boxStart, datetime boxEnd, color col, int dayIndex)
+bool SOB_ProcessOneDay(string sessionName, datetime boxStart, datetime boxEnd, color col, int dayIndex)
 {
    int shiftStart = iBarShift(Symbol(), SOB_BaseTimeframe, boxStart, false);
    int shiftEnd   = iBarShift(Symbol(), SOB_BaseTimeframe, boxEnd, false);
-   if(shiftStart < 0 || shiftEnd < 0) return;
-   if(shiftStart <= shiftEnd) return;
+   if(shiftStart < 0 || shiftEnd < 0) return(false);
+   if(shiftStart <= shiftEnd) return(false);
 
    // v1.12 (فیکس - حسابِ واقعیِ XChief): آفست تأیید شد پایدار است (10800 روی هر TF)، پس علتِ
    // تغییرِ اندازه با تایم‌فریم این بود: وقتی چارت روی TFِ بالاتر از base (M5) است، تاریخچه‌ی M5
@@ -1735,8 +1739,8 @@ void SOB_ProcessOneDay(string sessionName, datetime boxStart, datetime boxEnd, c
    // نمی‌پوشاند، این دور را رد کن - همین دسترسی MT4 را وادار به بک‌فیلِ M5 می‌کند و دورِ بعد از
    // دیتای کامل رسم می‌شود (مستقل از TFِ چارت).
    int baseBars = iBars(Symbol(), SOB_BaseTimeframe);
-   if(baseBars <= 0) return;
-   if(iTime(Symbol(), SOB_BaseTimeframe, baseBars - 1) > boxStart) return;  // M5 history not deep enough yet
+   if(baseBars <= 0) return(false);
+   if(iTime(Symbol(), SOB_BaseTimeframe, baseBars - 1) > boxStart) return(false);  // M5 history not deep enough yet
 
    double boxHigh = -1, boxLow = -1;
    for(int i = shiftEnd; i <= shiftStart; i++)
@@ -1746,7 +1750,7 @@ void SOB_ProcessOneDay(string sessionName, datetime boxStart, datetime boxEnd, c
       if(boxHigh < 0 || h > boxHigh) boxHigh = h;
       if(boxLow  < 0 || l < boxLow)  boxLow  = l;
    }
-   if(boxHigh <= boxLow) return;
+   if(boxHigh <= boxLow) return(false);
 
    datetime dayEnd = boxEnd - (boxEnd % 86400) + 86400;
    int dayEndShift = iBarShift(Symbol(), SOB_BaseTimeframe, dayEnd, false);
@@ -1762,7 +1766,7 @@ void SOB_ProcessOneDay(string sessionName, datetime boxStart, datetime boxEnd, c
       SOB_DrawBoxSizeLabel(tag, boxStart, boxEnd, boxHigh, boxHigh - boxLow, col);
    }
 
-   if(!SOB_ShowProjectionLevels) return;
+   if(!SOB_ShowProjectionLevels) return(true);
 
    int breakoutShift = -1;
    int direction = 0;
@@ -1772,7 +1776,7 @@ void SOB_ProcessOneDay(string sessionName, datetime boxStart, datetime boxEnd, c
       if(c > boxHigh) { breakoutShift = i; direction = 1; }
       if(c < boxLow)  { breakoutShift = i; direction = -1; }
    }
-   if(breakoutShift < 0) return;
+   if(breakoutShift < 0) return(true);
 
    datetime breakoutTime = iTime(Symbol(), SOB_BaseTimeframe, breakoutShift);
    double boxSize = boxHigh - boxLow;
@@ -1782,6 +1786,7 @@ void SOB_ProcessOneDay(string sessionName, datetime boxStart, datetime boxEnd, c
       double price = (direction > 0) ? (boxHigh + lvl * boxSize) : (boxLow - lvl * boxSize);
       SOB_DrawProjectionLine(tag, lvl, breakoutTime, dayEnd, price, col);
    }
+   return(true);
 }
 
 color SOB_BlendTowardWhite(color c, int pct)
