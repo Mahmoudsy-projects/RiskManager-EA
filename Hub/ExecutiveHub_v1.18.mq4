@@ -25,6 +25,7 @@
 //|    ماژول ۲: Session Opening Box + NY Edge (موتور تایم‌زون مشترک)     |
 //|    ماژول ۳: MTF Candle Preview + EMA Overlay                        |
 //+------------------------------------------------------------------+
+//--- v1.18 hotfix: SOB loop starts at d=-1 so "today's Tokyo box" shows between 00:00 UTC and NY midnight (it was skipped).
 //--- v1.18 (FEAT-060, NOT COMPILED): market-anchored automatic DST. SOB inputs are now in each MARKET's LOCAL time (Tokyo JST, London, New York); shared RM_SessionTime.mqh adds EU/AU DST + per-day server offset. NY Edge 09:00-18:00 NY unchanged.
 //--- v1.17 (FEAT-052): 4th master button "Theme" + drawer of 7 chart colour themes and "Original" (one-shot, per chart); Hub-drawn objects get automatic contrast on any theme.
 //--- v1.16: Label tab geometry (all 18 buttons = Master height, narrower label width) + new default label list.
@@ -1709,7 +1710,10 @@ void SOB_ProcessSession(string sessionName, string startStr, string endStr, colo
    int sh = startMin / 60, sm = startMin % 60;
    int eh = endMin / 60,   em = endMin % 60;
 
-   for(int d = 0; d < days; d++)
+   // v1.18 hotfix (FEAT-060): d از -1 شروع می‌شود. «روزِ» هر بازار روی تقویمِ نیویورک شمرده می‌شود؛ بین ۰۰:۰۰ UTC تا نیمه‌شبِ
+   // نیویورک (~۰۵:۰۰ UTC) تاریخِ توکیو/لندن یک روز جلوتر از تاریخِ نیویورک است، پس باکسِ «امروزِ توکیو» همان d=-1 است
+   // (در v1.17 همان باکس با ۲۰:۰۰ NY در d=0 بود). d=-1 وقتی تاریخ‌ها هم‌روزند فردا/آینده است و خودِ SOB_ProcessOneDay آن را رد می‌کند.
+   for(int d = -1; d < days; d++)
    {
       datetime boxStart, boxEnd;
       ST_ComputeSessionByDaysAgoMkt(d, mkt, sh, sm, eh, em, boxStart, boxEnd);   // v1.18 (FEAT-060): market-aware (NY = مسیرِ قبلی)
