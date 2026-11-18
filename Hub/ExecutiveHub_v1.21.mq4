@@ -40,7 +40,7 @@
 #property description "Drawn shapes/labels are independent, selectable chart"
 #property description "objects that persist even if this indicator is removed -"
 #property description "delete them manually if needed."
-#property version   "1.20"
+#property version   "1.21"
 #property strict
 #property indicator_chart_window
 #property indicator_buffers 7
@@ -83,10 +83,14 @@ input color DefaultColorB      = clrDimGray;  // Shade 2 color (dark gray)
 input color DefaultColorC      = clrTurquoise; // Shade 3 color (turquoise blue)
 input color DefaultColorD      = clrLightPink; // Shade 4 color (light pink)
 input int   DefaultBorderWidth = 2;
-input color DefaultPathColor   = clrGray;     // Default Path color (gray theme)
+input color DefaultPathColor   = clrBlue;     // Default Path color (v1.21: blue; previously gray)
 input int   DefaultPathWidth   = 2;
 input color DefaultLineColor   = clrRed;      // Default Line color
 input int   DefaultLineWidth   = 3;
+input color DefaultPath2Color  = clrRed;      // v1.21: Path 2 default color
+input int   DefaultPath2Width  = 2;
+input color DefaultLine2Color  = clrBlue;     // v1.21: Line 2 default color
+input int   DefaultLine2Width  = 3;
 input int   PanelTopY          = 29;   // distance from the top of the chart - tuned by Mahmoud to line up with Risk Manager EA's own header row
 input int   PanelWidth         = 195;  // matches Risk Manager EA's own PW=195 exactly - FIX (v1.08, per Mahmoud's live test): now actually USED (see UsableChartWidth()) to reserve that much space on the right so the Hub's own centering/shrink math never lets it creep under RiskManager EA's own top-right panel on a narrow chart. Was previously just a documentation value with no code effect.
 input int   BtnHeight          = 22;
@@ -256,6 +260,8 @@ input color  EMA_Mode3_NeutralColor = clrGray;
 // v1.15: دو ابزار جدید خط - داخل گرید Draw (۸ -> ۱۰ آیتم، ۴ -> ۵ ستون؛ عرض Draw از Label و Indicator کمتر می‌مونه)
 #define BTN_HLINE    PFX+"Btn_HLine"
 #define BTN_DASH     PFX+"Btn_Dash"
+#define BTN_PATH2    PFX+"Btn_Path2"   // v1.21: Path 2 (default red, independent color/width/style)
+#define BTN_LINE2    PFX+"Btn_Line2"   // v1.21: Line 2 (default blue, independent)
 #define BTN_MEASURE  PFX+"Btn_Measure"
 #define MEASURE_PREVIEW_NAME PFX+"MeasurePreview"
 #define BTN_MASTER_DRAW PFX+"Btn_MasterDraw"
@@ -266,7 +272,7 @@ input color  EMA_Mode3_NeutralColor = clrGray;
 //--- the 3 Draw-tool previews above, just for the armed Label grid.
 #define LABEL_PREVIEW_NAME PFX+"LabelPreview"
 #define TOOL_COUNT 2
-#define TOOL_COUNT_ITEMS 10
+#define TOOL_COUNT_ITEMS 12   // v1.21: 10 -> 12 (Path 2 + Line 2)
 
 //--- نام ابجکت‌ها/کلیدها — برچسب‌گذاری
 #define BTN_MASTER_LABELS PFX+"Btn_MasterLabels"
@@ -388,7 +394,9 @@ int HubLabelFontSize(string t)
 //--- در OnDeinit / RaiseHubPanelToFront پاک نمی‌شود (روی تغییر تایم‌فریم/ری‌لود/ری‌استارت و حتی حذف Hub می‌ماند).
 #define BTN_MASTER_THEME PFX+"Btn_MasterTheme"
 #define BTN_THEME_ORIG   PFX+"Btn_Theme_Orig"
-#define THEME_COUNT      7
+#define THEME_COUNT      10   // v1.21: 7 -> 10
+#define THEME_GRID_COUNT 7
+#define THEME_KEEP       ((color)0x02000000)   // «don't touch» marker (Bid/Last for themes 1-3,5-7 and old TO1 Originals)
 #define THEME_ORIG_NAME  PFX+"ThemeOrig"
 
 //--- v1.17 (FEAT-052): خواندن رنگ چارت برای محاسبات کنتراست. ChartSetInteger در MT4 ممکن است async باشد (خواندن
@@ -565,7 +573,7 @@ void RaiseHubPanelToFront()
       ObjectDelete(0, Theme_BtnName(ti));
    ObjectDelete(0, BTN_THEME_ORIG);
 
-   string toolNames[TOOL_COUNT_ITEMS] = {BTN_FA, BTN_FB, BTN_FC, BTN_FD, BTN_HA, BTN_HB, BTN_PATH, BTN_LINE, BTN_HLINE, BTN_DASH};
+   string toolNames[TOOL_COUNT_ITEMS] = {BTN_FA, BTN_FB, BTN_FC, BTN_FD, BTN_HA, BTN_HB, BTN_PATH, BTN_LINE, BTN_PATH2, BTN_LINE2, BTN_HLINE, BTN_DASH};
    for(int i = 0; i < TOOL_COUNT_ITEMS; i++)
       ObjectDelete(0, toolNames[i]);
    ObjectDelete(0, BTN_MEASURE);  // v1.14 (اصلاح): بیرون آرایه‌ی TOOL_COUNT_ITEMS، پس جدا حذف می‌شه
@@ -609,7 +617,7 @@ double Ema60NeutBuffer[];
 // پنل Draw هاب، کنار بقیه‌ی ابزارهای رسم دستی (Shade/Rectangle/Path/Line). MODE_MEASURE مثل
 // MODE_LINE یک ابزار دو-کلیکی‌ست، ولی به‌جای یک خط تکی، ۷ خط + ۲ ناحیه‌ی شید‌دار (همون فرمت
 // گرافیکی که قبلاً برای RM_Tools.mqh نوشته شده بود) رسم می‌کنه.
-enum DRAW_MODE { MODE_NONE, MODE_FILL_A, MODE_FILL_B, MODE_FILL_C, MODE_FILL_D, MODE_HOLLOW_A, MODE_HOLLOW_B, MODE_PATH, MODE_LINE, MODE_MEASURE, MODE_HLINE, MODE_DASH };
+enum DRAW_MODE { MODE_NONE, MODE_FILL_A, MODE_FILL_B, MODE_FILL_C, MODE_FILL_D, MODE_HOLLOW_A, MODE_HOLLOW_B, MODE_PATH, MODE_LINE, MODE_MEASURE, MODE_HLINE, MODE_DASH, MODE_PATH2, MODE_LINE2 };
 DRAW_MODE drawMode = MODE_NONE;
 
 enum CLICK_STATE { CLICK_IDLE, CLICK_WAIT_FIRST, CLICK_WAIT_SECOND };
@@ -645,6 +653,8 @@ int   gStyle, gPathStyle, gLineStyle;
 // v1.15 (revision): Horizontal Line و Dash Line هرکدام پیش‌فرض مستقل خودشان را دارند (رنگ/ضخامت/سبک) که با ویرایش
 // آبجکت روی چارت عوض و ذخیره می‌شود - دقیقاً مثل Line و Path؛ ولی از پیش‌فرض Line جدا هستند.
 color gHRayColor, gDashColor;
+color gPath2Color, gLine2Color;   // v1.21
+int   gPath2Width, gLine2Width, gPath2Style, gLine2Style;
 int   gHRayWidth, gDashWidth;
 int   gHRayStyle, gDashStyle;
 int   gCounter = 0;
@@ -712,6 +722,12 @@ int OnInit()
    gHRayColor = LoadPersistedColor("HRayColor", gLineColor);
    gHRayWidth = LoadPersistedInt("HRayWidth", gLineWidth);
    gHRayStyle = LoadPersistedInt("HRayStyle", STYLE_SOLID);
+   gPath2Color = LoadPersistedColor("Path2Color", DefaultPath2Color);   // v1.21
+   gPath2Width = LoadPersistedInt("Path2Width", DefaultPath2Width);
+   gPath2Style = LoadPersistedInt("Path2Style", STYLE_SOLID);
+   gLine2Color = LoadPersistedColor("Line2Color", DefaultLine2Color);
+   gLine2Width = LoadPersistedInt("Line2Width", DefaultLine2Width);
+   gLine2Style = LoadPersistedInt("Line2Style", STYLE_SOLID);
    gDashColor = LoadPersistedColor("DashColor", gLineColor);
    gDashWidth = LoadPersistedInt("DashWidth", 1);
    gDashStyle = LoadPersistedInt("DashStyle", STYLE_DASH);
@@ -885,6 +901,8 @@ void OnDeinit(const int reason)
    ObjectDelete(0, BTN_LINE);
    ObjectDelete(0, BTN_HLINE);  // v1.15
    ObjectDelete(0, BTN_DASH);   // v1.15
+   ObjectDelete(0, BTN_PATH2);  // v1.21
+   ObjectDelete(0, BTN_LINE2);  // v1.21
    ObjectDelete(0, BTN_MEASURE);  // v1.14 (اصلاح)
    RemoveMeasureTool(MEASURE_PREVIEW_NAME);  // v1.14 (اصلاح): پیش‌نمایش شاید نیمه‌کاره باز مونده باشه
    ObjectDelete(0, BTN_MASTER_DRAW);
@@ -2631,6 +2649,8 @@ void CreateButtons()
    CreateOneButton(BTN_HB, "Rectangle 2", gColorB);
    CreateOneButton(BTN_PATH, "Path", gPathColor);
    CreateOneButton(BTN_LINE, "Line", gLineColor);
+   CreateOneButton(BTN_PATH2, "Path 2", gPath2Color);   // v1.21
+   CreateOneButton(BTN_LINE2, "Line 2", gLine2Color);   // v1.21
    CreateOneButton(BTN_HLINE, "Horizontal Line", gHRayColor);  // v1.15
    ObjectSetInteger(0, BTN_HLINE, OBJPROP_FONTSIZE, 6);         // متن بلندتره؛ با فونت ۷ روی عرض‌های کوچک‌شده می‌زنه بیرون
    CreateOneButton(BTN_DASH, "Dash Line", gDashColor);          // v1.15
@@ -2705,7 +2725,7 @@ void ApplyDrawMinimizedState()
    if(gDrawMinimized) CancelDrawing();
 
    long tf = gDrawMinimized ? OBJ_NO_PERIODS : OBJ_ALL_PERIODS;
-   string names[TOOL_COUNT_ITEMS] = {BTN_FA, BTN_FB, BTN_FC, BTN_FD, BTN_HA, BTN_HB, BTN_PATH, BTN_LINE, BTN_HLINE, BTN_DASH};
+   string names[TOOL_COUNT_ITEMS] = {BTN_FA, BTN_FB, BTN_FC, BTN_FD, BTN_HA, BTN_HB, BTN_PATH, BTN_LINE, BTN_PATH2, BTN_LINE2, BTN_HLINE, BTN_DASH};
    for(int i = 0; i < TOOL_COUNT_ITEMS; i++)
       ObjectSetInteger(0, names[i], OBJPROP_TIMEFRAMES, tf);
    // v1.14 (اصلاح): BTN_MEASURE عمداً بیرون آرایه‌ی TOOL_COUNT_ITEMS/گرید موند (تا چیدمان گرید
@@ -2814,7 +2834,7 @@ void PositionButtons()
 
    //--- ۸ ابزار رسم، شبکه‌ی ۲ردیفی (TOOL_COUNT=2 ردیف)، افقی جلو می‌ره،
    //--- سمت راست ۳ دکمه‌ی مادر
-   string toolNames[TOOL_COUNT_ITEMS] = {BTN_FA, BTN_FB, BTN_FC, BTN_FD, BTN_HA, BTN_HB, BTN_PATH, BTN_LINE, BTN_HLINE, BTN_DASH};
+   string toolNames[TOOL_COUNT_ITEMS] = {BTN_FA, BTN_FB, BTN_FC, BTN_FD, BTN_HA, BTN_HB, BTN_PATH, BTN_LINE, BTN_PATH2, BTN_LINE2, BTN_HLINE, BTN_DASH};
    for(int i = 0; i < TOOL_COUNT_ITEMS; i++)
    {
       int row = i % TOOL_COUNT;
@@ -2869,7 +2889,7 @@ void PositionButtons()
       ObjectSetInteger(0, indicatorBtns[ind], OBJPROP_XSIZE, g_effBtnWidth);
    }
 
-   Theme_PositionButtons(gridXStart, gridRow0Y, gridRow1YTools);   // v1.17 (FEAT-052): ۷ تم + Original (۲ ردیف × ۴ ستون)
+   Theme_PositionButtons(gridXStart, gridRow0Y, gridRow1YTools, xStart);   // v1.17 (FEAT-052): ۷ تم + Original (۲ ردیف × ۴ ستون)
 
    UpdateHubBackground();
 }
@@ -2900,6 +2920,12 @@ int PanelContentWidth()
 //| raw inputs (the "full size" baseline) and PanelContentWidth() now  |
 //| calls it with whatever the current effective sizes are.            |
 //+------------------------------------------------------------------+
+// v1.21: same width for all 11 Theme buttons; 3 buttons exactly fill the width of the 4 master buttons (no gap)
+int ThemeBtnW(int masterW, int gap)
+{
+   return((4 * masterW + gap) / 3);
+}
+
 int ComputeContentWidth(int btnW, int masterW, int gap, int labelW)
 {
    int masterRowWidth = 4 * masterW + 3 * gap;   // v1.17 (FEAT-052): ۴ دکمه‌ی مادر (Indicator/Label/Draw/Theme)
@@ -2912,7 +2938,7 @@ int ComputeContentWidth(int btnW, int masterW, int gap, int labelW)
    else if(!gIndicatorsMinimized)
       gridWidth = GridCols(9) * btnW + (GridCols(9) - 1) * gap;
    else if(!gThemeMinimized)
-      gridWidth = 4 * labelW + 3 * gap;   // v1.17 (FEAT-052): ۴ ستون دکمه‌ی هم‌اندازه‌ی لیبل (۲ ردیف: ۱..۴ / ۵..۷ + Original)
+      gridWidth = 4 * ThemeBtnW(masterW, gap) + 3 * gap;   // v1.21: ۴ ستون؛ عرض هر دکمه‌ی تم = یک‌سوم عرض چهار دکمه‌ی مادر
 
    if(gridWidth == 0)
       return(masterRowWidth); // هیچ کشویی باز نیست - فقط عرض ۴ دکمه‌ی مادر (v1.17 FEAT-052)
@@ -3089,11 +3115,11 @@ void HighlightActiveButton(DRAW_MODE mode)
    //--- رنگ اصلی کامل. طبق پیشنهاد Mahmoud.
    string all[TOOL_COUNT_ITEMS];
    all[0] = BTN_FA; all[1] = BTN_FB; all[2] = BTN_FC; all[3] = BTN_FD;
-   all[4] = BTN_HA; all[5] = BTN_HB; all[6] = BTN_PATH; all[7] = BTN_LINE; all[8] = BTN_HLINE; all[9] = BTN_DASH;
+   all[4] = BTN_HA; all[5] = BTN_HB; all[6] = BTN_PATH; all[7] = BTN_LINE; all[8] = BTN_PATH2; all[9] = BTN_LINE2; all[10] = BTN_HLINE; all[11] = BTN_DASH;
 
    color fullColors[TOOL_COUNT_ITEMS];
    fullColors[0] = gColorA; fullColors[1] = gColorB; fullColors[2] = gColorC; fullColors[3] = gColorD;
-   fullColors[4] = gColorA; fullColors[5] = gColorB; fullColors[6] = gPathColor; fullColors[7] = gLineColor; fullColors[8] = gHRayColor; fullColors[9] = gDashColor;
+   fullColors[4] = gColorA; fullColors[5] = gColorB; fullColors[6] = gPathColor; fullColors[7] = gLineColor; fullColors[8] = gPath2Color; fullColors[9] = gLine2Color; fullColors[10] = gHRayColor; fullColors[11] = gDashColor;
 
    int activeIdx = -1;
    if(mode == MODE_FILL_A)   activeIdx = 0;
@@ -3104,8 +3130,10 @@ void HighlightActiveButton(DRAW_MODE mode)
    if(mode == MODE_HOLLOW_B) activeIdx = 5;
    if(mode == MODE_PATH)     activeIdx = 6;
    if(mode == MODE_LINE)     activeIdx = 7;
-   if(mode == MODE_HLINE)    activeIdx = 8;  // v1.15
-   if(mode == MODE_DASH)     activeIdx = 9;  // v1.15
+   if(mode == MODE_PATH2)    activeIdx = 8;  // v1.21
+   if(mode == MODE_LINE2)    activeIdx = 9;  // v1.21
+   if(mode == MODE_HLINE)    activeIdx = 10; // v1.15
+   if(mode == MODE_DASH)     activeIdx = 11; // v1.15
 
    for(int i = 0; i < TOOL_COUNT_ITEMS; i++)
       ObjectSetInteger(0, all[i], OBJPROP_BGCOLOR, (i == activeIdx) ? fullColors[i] : DimColor(fullColors[i]));
@@ -3299,21 +3327,24 @@ void ApplyIndicatorsMinimizedState()
 //| چارت ذخیره می‌کند. فقط چارتِ فعلی؛ Bid line / مقیاس / autoscroll /      |
 //| حجم on-off / جداکننده‌ی دوره‌ها دست‌نخورده.                            |
 //+------------------------------------------------------------------+
-//--- جدول ثابت ۷ تم (بدون input و فایل). ستون Button = رنگ Bull candle.
-color THEME_BG[THEME_COUNT]     = {C'169,169,169', C'0,0,0',       C'0,0,0',       C'24,24,24',  C'192,192,192', C'0,0,0',       C'16,20,26'};
-color THEME_FG[THEME_COUNT]     = {C'0,0,0',       C'255,255,255', C'255,255,255', C'255,255,255', C'0,0,0',      C'255,255,255', C'210,214,220'};
-color THEME_GRID[THEME_COUNT]   = {C'0,0,0',       C'128,128,128', C'128,128,128', C'35,38,46',  C'128,128,128', C'128,128,128', C'35,38,46'};
-color THEME_BARUP[THEME_COUNT]  = {C'0,0,0',       C'218,165,32',  C'0,100,0',     C'96,96,96',  C'0,0,0',       C'211,211,211', C'38,166,154'};
-color THEME_BARDN[THEME_COUNT]  = {C'0,0,0',       C'192,192,192', C'218,165,32',  C'53,60,66',  C'0,0,0',       C'128,0,0',     C'239,83,80'};
-color THEME_BULL[THEME_COUNT]   = {C'95,158,160',  C'218,165,32',  C'0,100,0',     C'240,240,240', C'255,255,255', C'211,211,211', C'38,166,154'};
-color THEME_BEAR[THEME_COUNT]   = {C'253,245,230', C'192,192,192', C'218,165,32',  C'115,128,142', C'128,128,128', C'128,0,0',     C'239,83,80'};
-#define THEME_LINE_CLR C'105,105,105'   // Line graph (مشترک همه‌ی تم‌ها)
-#define THEME_VOL_CLR  C'105,105,105'   // Volumes
-#define THEME_ASK_CLR  C'166,90,62'     // Ask line
-#define THEME_STOP_CLR C'122,59,52'     // Stop levels
+//--- جدول ثابت ۱۰ تم (v1.13). ستون Button = رنگ Bull candle. Line/Vol/Ask/Stop حالا برای هر تم جدا؛ Bid/Last فقط
+//--- برای تم‌های ۴، ۸، ۹، ۱۰ تعیین شده و برای بقیه THEME_KEEP (دست‌نخورده) است.
+color THEME_BG[THEME_COUNT]     = {C'169,169,169', C'0,0,0',       C'0,0,0',       C'0,0,0',     C'192,192,192', C'0,0,0',       C'16,20,26',    C'255,255,255', C'255,255,255', C'255,255,255'};
+color THEME_FG[THEME_COUNT]     = {C'0,0,0',       C'255,255,255', C'255,255,255', C'255,255,255', C'0,0,0',      C'255,255,255', C'210,214,220', C'0,0,0',       C'0,0,0',       C'0,0,0'};
+color THEME_GRID[THEME_COUNT]   = {C'0,0,0',       C'128,128,128', C'128,128,128', C'35,38,46',  C'128,128,128', C'128,128,128', C'35,38,46',    C'192,192,192', C'241,236,242', C'241,236,242'};
+color THEME_BARUP[THEME_COUNT]  = {C'0,0,0',       C'218,165,32',  C'0,100,0',     C'255,255,255', C'0,0,0',      C'211,211,211', C'38,166,154',  C'0,0,0',       C'0,0,0',       C'31,137,126'};
+color THEME_BARDN[THEME_COUNT]  = {C'0,0,0',       C'192,192,192', C'218,165,32',  C'102,102,102', C'0,0,0',      C'128,0,0',     C'239,83,80',   C'0,0,0',       C'178,34,34',   C'0,0,0'};
+color THEME_BULL[THEME_COUNT]   = {C'95,158,160',  C'218,165,32',  C'0,100,0',     C'240,240,240', C'255,255,255', C'211,211,211', C'38,166,154',  C'255,255,255', C'255,255,255', C'192,241,236'};
+color THEME_BEAR[THEME_COUNT]   = {C'253,245,230', C'192,192,192', C'218,165,32',  C'0,0,0',     C'128,128,128', C'128,0,0',     C'239,83,80',   C'0,0,0',       C'255,179,179', C'255,255,255'};
+color THEME_LINE[THEME_COUNT]   = {C'105,105,105', C'105,105,105', C'105,105,105', C'105,105,105', C'105,105,105', C'105,105,105', C'105,105,105', C'0,0,0',       C'86,186,132',  C'86,186,132'};
+color THEME_VOL[THEME_COUNT]    = {C'105,105,105', C'105,105,105', C'105,105,105', C'105,105,105', C'105,105,105', C'105,105,105', C'105,105,105', C'0,128,0',     C'38,166,154',  C'38,166,154'};
+color THEME_ASK[THEME_COUNT]    = {C'166,90,62',   C'166,90,62',   C'166,90,62',   C'166,90,62', C'166,90,62',   C'166,90,62',   C'166,90,62',   C'192,192,192', C'239,83,80',   C'239,83,80'};
+color THEME_STOP[THEME_COUNT]   = {C'122,59,52',   C'122,59,52',   C'122,59,52',   C'122,59,52', C'122,59,52',   C'122,59,52',   C'122,59,52',   C'255,69,0',    C'239,83,80',   C'239,83,80'};
+color THEME_BID[THEME_COUNT]    = {THEME_KEEP, THEME_KEEP, THEME_KEEP, C'192,192,192', THEME_KEEP, THEME_KEEP, THEME_KEEP, C'192,192,192', C'38,166,154', C'38,166,154'};
+color THEME_LAST[THEME_COUNT]   = {THEME_KEEP, THEME_KEEP, THEME_KEEP, C'192,192,192', THEME_KEEP, THEME_KEEP, THEME_KEEP, C'192,192,192', C'156,186,240', C'156,186,240'};
 
-//--- کدگذاری فشرده (base64 دستی، ۵۱ کاراکتر < ۶۳) برای ذخیره‌ی Original داخل متن آبجکت مخفی:
-//--- "TO1:" + ۱۱ رنگ x ۴ کاراکتر + ۲ کاراکتر ماسک clrNONE + ۱ کاراکتر پرچم‌ها (grid/shift/askLine + mode)
+//--- کدگذاری فشرده (base64 دستی) برای ذخیره‌ی Original داخل متن آبجکت مخفی (v1.13: فرمت TO2 با ۱۳ رنگ؛ TO1 قدیمی ۱۱ رنگ هنوز خوانده می‌شود):
+//--- "TO2:" + ۱۳ رنگ x ۴ کاراکتر + ۳ کاراکتر ماسک clrNONE + ۱ کاراکتر پرچم‌ها = ۶۰ کاراکتر
 string THEME_B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 string Theme_B64Char(int v)
@@ -3328,18 +3359,20 @@ int Theme_B64Val(string ch)
 
 string Theme_Encode(color &c[], bool grid, bool shift, bool askLine, int mode)
 {
-   string s = "TO1:";
+   string s = "TO2:";
    int mask = 0;
-   for(int i = 0; i < 11; i++)
+   for(int i = 0; i < 13; i++)
    {
       int v = 0;
       if(c[i] == clrNONE) mask |= (1 << i);
+      else if(c[i] == THEME_KEEP) v = 0;
       else                v = (int)c[i];
       for(int k = 3; k >= 0; k--)
          s += Theme_B64Char((v >> (6 * k)) & 63);
    }
    s += Theme_B64Char(mask & 63);
    s += Theme_B64Char((mask >> 6) & 63);
+   s += Theme_B64Char((mask >> 12) & 63);
    int fl = (grid ? 1 : 0) | (shift ? 2 : 0) | (askLine ? 4 : 0) | ((mode & 3) << 3);
    s += Theme_B64Char(fl);
    return(s);
@@ -3347,13 +3380,22 @@ string Theme_Encode(color &c[], bool grid, bool shift, bool askLine, int mode)
 
 bool Theme_Decode(string s, color &c[], bool &grid, bool &shift, bool &askLine, int &mode)
 {
-   if(StringLen(s) != 51 || StringSubstr(s, 0, 4) != "TO1:") return(false);
-   int m0 = Theme_B64Val(StringSubstr(s, 48, 1));
-   int m1 = Theme_B64Val(StringSubstr(s, 49, 1));
-   int fl = Theme_B64Val(StringSubstr(s, 50, 1));
-   if(m0 < 0 || m1 < 0 || fl < 0) return(false);
-   int mask = m0 | (m1 << 6);
-   for(int i = 0; i < 11; i++)
+   int nCol = 0, maskLen = 0;
+   string tag = StringSubstr(s, 0, 4);
+   if(tag == "TO2:" && StringLen(s) == 60) { nCol = 13; maskLen = 3; }
+   else if(tag == "TO1:" && StringLen(s) == 51) { nCol = 11; maskLen = 2; }   // فرمت قدیمی Hub 1.12
+   else return(false);
+   int mpos = 4 + nCol * 4;
+   int mask = 0;
+   for(int m = 0; m < maskLen; m++)
+   {
+      int mv = Theme_B64Val(StringSubstr(s, mpos + m, 1));
+      if(mv < 0) return(false);
+      mask |= (mv << (6 * m));
+   }
+   int fl = Theme_B64Val(StringSubstr(s, mpos + maskLen, 1));
+   if(fl < 0) return(false);
+   for(int i = 0; i < nCol; i++)
    {
       int v = 0;
       for(int k = 0; k < 4; k++)
@@ -3364,6 +3406,7 @@ bool Theme_Decode(string s, color &c[], bool &grid, bool &shift, bool &askLine, 
       }
       c[i] = (((mask >> i) & 1) != 0) ? clrNONE : (color)v;
    }
+   if(nCol == 11) { c[11] = THEME_KEEP; c[12] = THEME_KEEP; }   // Original قدیمی: Bid/Last ثبت نشده -> دست‌نخورده
    grid    = ((fl & 1) != 0);
    shift   = ((fl & 2) != 0);
    askLine = ((fl & 4) != 0);
@@ -3371,8 +3414,8 @@ bool Theme_Decode(string s, color &c[], bool &grid, bool &shift, bool &askLine, 
    return(true);
 }
 
-//--- ترتیب ۱۱ رنگ: 0 Background, 1 Foreground, 2 Grid, 3 BarUp, 4 BarDown, 5 CandleBull, 6 CandleBear,
-//--- 7 LineGraph, 8 Volumes, 9 Ask, 10 StopLevels
+//--- ترتیب ۱۳ رنگ: 0 Background, 1 Foreground, 2 Grid, 3 BarUp, 4 BarDown, 5 CandleBull, 6 CandleBear,
+//--- 7 LineGraph, 8 Volumes, 9 Ask, 10 StopLevels, 11 Bid, 12 Last
 void Theme_ReadChart(color &c[], bool &grid, bool &shift, bool &askLine, int &mode)
 {
    c[0]  = (color)ChartGetInteger(0, CHART_COLOR_BACKGROUND);
@@ -3386,6 +3429,8 @@ void Theme_ReadChart(color &c[], bool &grid, bool &shift, bool &askLine, int &mo
    c[8]  = (color)ChartGetInteger(0, CHART_COLOR_VOLUME);
    c[9]  = (color)ChartGetInteger(0, CHART_COLOR_ASK);
    c[10] = (color)ChartGetInteger(0, CHART_COLOR_STOP_LEVEL);
+   c[11] = (color)ChartGetInteger(0, CHART_COLOR_BID);
+   c[12] = (color)ChartGetInteger(0, CHART_COLOR_LAST);
    grid    = (ChartGetInteger(0, CHART_SHOW_GRID) != 0);
    shift   = (ChartGetInteger(0, CHART_SHIFT) != 0);
    askLine = (ChartGetInteger(0, CHART_SHOW_ASK_LINE) != 0);
@@ -3405,6 +3450,8 @@ void Theme_WriteChart(color &c[], bool grid, bool shift, bool askLine, int mode)
    ChartSetInteger(0, CHART_COLOR_VOLUME,      c[8]);
    ChartSetInteger(0, CHART_COLOR_ASK,         c[9]);
    ChartSetInteger(0, CHART_COLOR_STOP_LEVEL,  c[10]);
+   if(c[11] != THEME_KEEP) ChartSetInteger(0, CHART_COLOR_BID,  c[11]);   // v1.21
+   if(c[12] != THEME_KEEP) ChartSetInteger(0, CHART_COLOR_LAST, c[12]);
    ChartSetInteger(0, CHART_SHOW_GRID,         grid);
    ChartSetInteger(0, CHART_SHIFT,             shift);
    ChartSetInteger(0, CHART_MODE,              mode);
@@ -3415,7 +3462,7 @@ void Theme_WriteChart(color &c[], bool grid, bool shift, bool askLine, int mode)
 //--- نباشد یا متنش خراب/ناشناخته باشد دوباره ساخته می‌شود). اگر ذخیره نشد، تم اعمال نمی‌شود (جلوگیری از گم‌شدن رنگ‌های کاربر).
 bool Theme_EnsureOriginalStored()
 {
-   color tc[11]; bool tg, ts, ta; int tm;
+   color tc[13]; bool tg, ts, ta; int tm;
    if(ObjectFind(0, THEME_ORIG_NAME) >= 0)
    {
       if(Theme_Decode(ObjectGetString(0, THEME_ORIG_NAME, OBJPROP_TEXT), tc, tg, ts, ta, tm))
@@ -3469,7 +3516,7 @@ int Theme_DetectActive()
 //--- دکمه‌ها را به‌روز می‌کند و یک ChartRedraw() می‌زند.
 void Theme_Apply(int themeIdx)
 {
-   color cc[11]; bool cg, cs, ca; int cm;
+   color cc[13]; bool cg, cs, ca; int cm;
    if(themeIdx >= 0 && themeIdx < THEME_COUNT)
    {
       if(!Theme_EnsureOriginalStored())
@@ -3480,8 +3527,9 @@ void Theme_Apply(int themeIdx)
       cc[0] = THEME_BG[themeIdx];   cc[1] = THEME_FG[themeIdx];    cc[2] = THEME_GRID[themeIdx];
       cc[3] = THEME_BARUP[themeIdx]; cc[4] = THEME_BARDN[themeIdx];
       cc[5] = THEME_BULL[themeIdx]; cc[6] = THEME_BEAR[themeIdx];
-      cc[7] = THEME_LINE_CLR;       cc[8] = THEME_VOL_CLR;
-      cc[9] = THEME_ASK_CLR;        cc[10] = THEME_STOP_CLR;
+      cc[7] = THEME_LINE[themeIdx]; cc[8] = THEME_VOL[themeIdx];
+      cc[9] = THEME_ASK[themeIdx];  cc[10] = THEME_STOP[themeIdx];
+      cc[11] = THEME_BID[themeIdx]; cc[12] = THEME_LAST[themeIdx];   // v1.21
       cg = false; cs = true; ca = true; cm = CHART_CANDLES;
    }
    else
@@ -3622,16 +3670,20 @@ void ApplyThemeMinimizedState()
 }
 
 //--- شبکه‌ی ۲ ردیف × ۴ ستون، سمت راست ۴ دکمه‌ی مادر: ردیف ۰ = تم ۱..۴، ردیف ۱ = تم ۵..۷ + Original. عرض دکمه‌ها = عرض مؤثر دکمه‌ی لیبل.
-void Theme_PositionButtons(int gridX, int row0Y, int row1Y)
+void Theme_PositionButtons(int gridX, int row0Y, int row1Y, int masterX)
 {
+   // v1.21: all 11 buttons same width (one third of the 4-master row); row 1: 1..4 (grid), row 2: 5,6,7 under the masters then 8,9,10,Original (grid)
+   int tw = ThemeBtnW(g_effMasterBtnWidth, g_effBtnGap);
    for(int i = 0; i <= THEME_COUNT; i++)
    {
       string nm = (i < THEME_COUNT) ? Theme_BtnName(i) : BTN_THEME_ORIG;
-      int row = i / 4;
-      int col = i % 4;
-      ObjectSetInteger(0, nm, OBJPROP_XDISTANCE, gridX + col * (g_effLabelBtnWidth + g_effBtnGap));
-      ObjectSetInteger(0, nm, OBJPROP_YDISTANCE, (row == 0) ? row0Y : row1Y);
-      ObjectSetInteger(0, nm, OBJPROP_XSIZE, g_effLabelBtnWidth);
+      int x, y;
+      if(i < 4)      { x = gridX + i * (tw + g_effBtnGap);         y = row0Y; }
+      else if(i < 7) { x = masterX + (i - 4) * (tw + g_effBtnGap); y = row1Y; }
+      else           { x = gridX + (i - 7) * (tw + g_effBtnGap);   y = row1Y; }
+      ObjectSetInteger(0, nm, OBJPROP_XDISTANCE, x);
+      ObjectSetInteger(0, nm, OBJPROP_YDISTANCE, y);
+      ObjectSetInteger(0, nm, OBJPROP_XSIZE, tw);
       ObjectSetInteger(0, nm, OBJPROP_YSIZE, BtnHeight);
    }
    ObjectSetInteger(0, BTN_THEME_ORIG, OBJPROP_FONTSIZE, HubLabelFontSize("Original"));
@@ -3777,7 +3829,7 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
       EMA_ApplyGrayscaleColors(); // اگه بک‌گراند/تم چارت عوض شده باشه
    }
 
-   if(id == CHARTEVENT_OBJECT_CLICK && StringFind(sparam, PFX + "Path_") == 0)
+   if(id == CHARTEVENT_OBJECT_CLICK && (StringFind(sparam, PFX + "Path_") == 0 || StringFind(sparam, PFX + "Path2_") == 0))
    {
       SelectWholeGroup(sparam);
       return;
@@ -4041,7 +4093,7 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
       }
    }
 
-   if(id == CHARTEVENT_OBJECT_CLICK && (sparam == BTN_FA || sparam == BTN_FB || sparam == BTN_FC || sparam == BTN_FD || sparam == BTN_HA || sparam == BTN_HB || sparam == BTN_PATH || sparam == BTN_LINE || sparam == BTN_HLINE || sparam == BTN_DASH || sparam == BTN_MEASURE))
+   if(id == CHARTEVENT_OBJECT_CLICK && (sparam == BTN_FA || sparam == BTN_FB || sparam == BTN_FC || sparam == BTN_FD || sparam == BTN_HA || sparam == BTN_HB || sparam == BTN_PATH || sparam == BTN_LINE || sparam == BTN_PATH2 || sparam == BTN_LINE2 || sparam == BTN_HLINE || sparam == BTN_DASH || sparam == BTN_MEASURE))
    {
       ObjectSetInteger(0, sparam, OBJPROP_STATE, false);
       skipNextClick = true;
@@ -4056,6 +4108,8 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
       if(sparam == BTN_HB)   clicked = MODE_HOLLOW_B;
       if(sparam == BTN_PATH) clicked = MODE_PATH;
       if(sparam == BTN_LINE) clicked = MODE_LINE;
+      if(sparam == BTN_PATH2) clicked = MODE_PATH2;   // v1.21
+      if(sparam == BTN_LINE2) clicked = MODE_LINE2;   // v1.21
       if(sparam == BTN_HLINE) clicked = MODE_HLINE;  // v1.15
       if(sparam == BTN_DASH)  clicked = MODE_DASH;   // v1.15
       if(sparam == BTN_MEASURE) clicked = MODE_MEASURE;  // v1.14 (اصلاح)
@@ -4068,7 +4122,7 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
       {
          CancelDrawing();
          drawMode = clicked;
-         if(clicked == MODE_PATH)
+         if(clicked == MODE_PATH || clicked == MODE_PATH2)
          {
             pathHasPoint = false;
             gCounter++;
@@ -4104,6 +4158,28 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
 
    if(id == CHARTEVENT_OBJECT_CHANGE && StringFind(sparam, PFX) == 0 && sparam != PREVIEW_NAME && sparam != PATH_PREVIEW_NAME && sparam != LINE_PREVIEW_NAME)
    {
+      // v1.21: Path 2 / Line 2 edits change that tool's own defaults (names "Path2_"/"Line2_" don't contain "Path_"/"Line_")
+      if(StringFind(sparam, "Path2_") >= 0 || StringFind(sparam, "Line2_") >= 0)
+      {
+         bool isP2 = (StringFind(sparam, "Path2_") >= 0);
+         color c2 = (color)ObjectGetInteger(0, sparam, OBJPROP_COLOR);
+         int   w2 = (int)ObjectGetInteger(0, sparam, OBJPROP_WIDTH);
+         int   s2 = (int)ObjectGetInteger(0, sparam, OBJPROP_STYLE);
+         if(isP2)
+         {
+            if(c2 != gPath2Color) { gPath2Color = c2; SavePersistedColor("Path2Color", gPath2Color); HighlightActiveButton(drawMode); }
+            if(w2 != gPath2Width) { gPath2Width = w2; SavePersistedInt("Path2Width", gPath2Width); }
+            if(s2 != gPath2Style) { gPath2Style = s2; SavePersistedInt("Path2Style", gPath2Style); }
+         }
+         else
+         {
+            if(c2 != gLine2Color) { gLine2Color = c2; SavePersistedColor("Line2Color", gLine2Color); HighlightActiveButton(drawMode); }
+            if(w2 != gLine2Width) { gLine2Width = w2; SavePersistedInt("Line2Width", gLine2Width); }
+            if(s2 != gLine2Style) { gLine2Style = s2; SavePersistedInt("Line2Style", gLine2Style); }
+         }
+         return;
+      }
+
       if(StringFind(sparam, "Path_") >= 0)
       {
          color newPathColor = (color)ObjectGet(sparam, OBJPROP_COLOR);
@@ -4266,7 +4342,7 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
       return;
    }
 
-   if(id == CHARTEVENT_MOUSE_MOVE && drawMode == MODE_PATH && pathHasPoint)
+   if(id == CHARTEVENT_MOUSE_MOVE && (drawMode == MODE_PATH || drawMode == MODE_PATH2) && pathHasPoint)
    {
       static uint lastPathMoveMs = 0;
       uint nowMsP = GetTickCount();
@@ -4279,7 +4355,7 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
       return;
    }
 
-   if(id == CHARTEVENT_MOUSE_MOVE && (drawMode == MODE_LINE || drawMode == MODE_DASH) && clickState == CLICK_WAIT_SECOND)  // v1.15: Dash همان رفتار Line
+   if(id == CHARTEVENT_MOUSE_MOVE && (drawMode == MODE_LINE || drawMode == MODE_LINE2 || drawMode == MODE_DASH) && clickState == CLICK_WAIT_SECOND)  // v1.15: Dash همان رفتار Line
    {
       static uint lastLineMoveMs = 0;
       uint nowMsL = GetTickCount();
@@ -4322,7 +4398,7 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
       return;
    }
 
-   if(id == CHARTEVENT_MOUSE_MOVE && clickState == CLICK_WAIT_SECOND && drawMode != MODE_LINE && drawMode != MODE_DASH && drawMode != MODE_MEASURE)
+   if(id == CHARTEVENT_MOUSE_MOVE && clickState == CLICK_WAIT_SECOND && drawMode != MODE_LINE && drawMode != MODE_LINE2 && drawMode != MODE_DASH && drawMode != MODE_MEASURE)
    {
       static uint lastMoveMs = 0;
       uint nowMs = GetTickCount();
@@ -4335,7 +4411,7 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
       return;
    }
 
-   if(id == CHARTEVENT_CLICK && drawMode == MODE_PATH)
+   if(id == CHARTEVENT_CLICK && (drawMode == MODE_PATH || drawMode == MODE_PATH2))
    {
       if(skipNextClick)
       {
@@ -4390,13 +4466,14 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
       }
       else if(clickState == CLICK_WAIT_SECOND)
       {
-         if(drawMode == MODE_LINE || drawMode == MODE_DASH)
+         if(drawMode == MODE_LINE || drawMode == MODE_LINE2 || drawMode == MODE_DASH)
          {
             datetime t2 = clickTime; double p2 = clickPrice;
             if(gShiftHeld)
                ApplyShiftSnap(firstPixelX, firstPixelY, cx, cy, firstTime, firstPrice, t2, p2);
             if(t2 == firstTime && p2 == firstPrice) return;
             if(drawMode == MODE_DASH) FinalizeDash(firstTime, firstPrice, t2, p2);  // v1.15
+            else if(drawMode == MODE_LINE2) FinalizeLine2(firstTime, firstPrice, t2, p2);   // v1.21
             else                      FinalizeLine(firstTime, firstPrice, t2, p2);
             CancelDrawing();
          }
@@ -4571,7 +4648,7 @@ void UpdatePathPreview(datetime t1, double p1, datetime t2, double p2)
       ObjectSetInteger(0, PATH_PREVIEW_NAME, OBJPROP_HIDDEN, true);
       ObjectSetInteger(0, PATH_PREVIEW_NAME, OBJPROP_BACK, false);
    }
-   ObjectSetInteger(0, PATH_PREVIEW_NAME, OBJPROP_COLOR, Theme_ContrastSafe(gPathColor));   // v1.17 (FEAT-052)
+   ObjectSetInteger(0, PATH_PREVIEW_NAME, OBJPROP_COLOR, Theme_ContrastSafe((drawMode == MODE_PATH2) ? gPath2Color : gPathColor));   // v1.17 + v1.21
    ObjectMove(0, PATH_PREVIEW_NAME, 0, t1, p1);
    ObjectMove(0, PATH_PREVIEW_NAME, 1, t2, p2);
 }
@@ -4579,12 +4656,13 @@ void UpdatePathPreview(datetime t1, double p1, datetime t2, double p2)
 void FinalizePathSegment(datetime t1, double p1, datetime t2, double p2)
 {
    pathSegCounter++;
-   string name = PFX + "Path_" + pathSessionId + "_seg" + (string)pathSegCounter;
+   bool isP2 = (drawMode == MODE_PATH2);   // v1.21: Path 2 -> prefix "Path2_" (grouped by _seg like Path)
+   string name = PFX + (isP2 ? "Path2_" : "Path_") + pathSessionId + "_seg" + (string)pathSegCounter;
 
    ObjectCreate(0, name, OBJ_TREND, 0, t1, p1, t2, p2);
-   ObjectSetInteger(0, name, OBJPROP_COLOR, Theme_ContrastSafe(gPathColor));   // v1.17 (FEAT-052)
-   ObjectSetInteger(0, name, OBJPROP_WIDTH, gPathWidth);
-   ObjectSetInteger(0, name, OBJPROP_STYLE, gPathStyle);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, Theme_ContrastSafe(isP2 ? gPath2Color : gPathColor));   // v1.17 (FEAT-052)
+   ObjectSetInteger(0, name, OBJPROP_WIDTH, isP2 ? gPath2Width : gPathWidth);
+   ObjectSetInteger(0, name, OBJPROP_STYLE, isP2 ? gPath2Style : gPathStyle);
    ObjectSetInteger(0, name, OBJPROP_RAY_LEFT, false);
    ObjectSetInteger(0, name, OBJPROP_RAY_RIGHT, false);
    ObjectSetInteger(0, name, OBJPROP_SELECTABLE, true);
@@ -4629,7 +4707,7 @@ void UpdateLinePreview(datetime t1, double p1, datetime t2, double p2)
       ObjectSetInteger(0, LINE_PREVIEW_NAME, OBJPROP_HIDDEN, true);
       ObjectSetInteger(0, LINE_PREVIEW_NAME, OBJPROP_BACK, false);
    }
-   ObjectSetInteger(0, LINE_PREVIEW_NAME, OBJPROP_COLOR, Theme_ContrastSafe((drawMode == MODE_DASH) ? gDashColor : gLineColor));  // v1.15 (revision) + v1.17 (FEAT-052)
+   ObjectSetInteger(0, LINE_PREVIEW_NAME, OBJPROP_COLOR, Theme_ContrastSafe((drawMode == MODE_DASH) ? gDashColor : ((drawMode == MODE_LINE2) ? gLine2Color : gLineColor)));  // v1.15 (revision) + v1.17 (FEAT-052)
    ObjectMove(0, LINE_PREVIEW_NAME, 0, t1, p1);
    ObjectMove(0, LINE_PREVIEW_NAME, 1, t2, p2);
 }
@@ -4666,6 +4744,24 @@ void FinalizeDash(datetime t1, double p1, datetime t2, double p2)
    ObjectSetInteger(0, name, OBJPROP_COLOR, Theme_ContrastSafe(gDashColor));   // v1.17 (FEAT-052)
    ObjectSetInteger(0, name, OBJPROP_WIDTH, gDashWidth);
    ObjectSetInteger(0, name, OBJPROP_STYLE, gDashStyle);
+   ObjectSetInteger(0, name, OBJPROP_RAY_LEFT, false);
+   ObjectSetInteger(0, name, OBJPROP_RAY_RIGHT, false);
+   ObjectSetInteger(0, name, OBJPROP_SELECTABLE, true);
+   ObjectSetInteger(0, name, OBJPROP_HIDDEN, false);
+}
+
+// v1.21: Line 2 - like Line but named "Line2_" (doesn't contain "Line_") with independent defaults
+void FinalizeLine2(datetime t1, double p1, datetime t2, double p2)
+{
+   if(ObjectFind(0, LINE_PREVIEW_NAME) >= 0) ObjectDelete(0, LINE_PREVIEW_NAME);
+
+   gCounter++;
+   string name = PFX + "Line2_" + (string)TimeLocal() + "_" + (string)gCounter;
+
+   ObjectCreate(0, name, OBJ_TREND, 0, t1, p1, t2, p2);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, Theme_ContrastSafe(gLine2Color));
+   ObjectSetInteger(0, name, OBJPROP_WIDTH, gLine2Width);
+   ObjectSetInteger(0, name, OBJPROP_STYLE, gLine2Style);
    ObjectSetInteger(0, name, OBJPROP_RAY_LEFT, false);
    ObjectSetInteger(0, name, OBJPROP_RAY_RIGHT, false);
    ObjectSetInteger(0, name, OBJPROP_SELECTABLE, true);

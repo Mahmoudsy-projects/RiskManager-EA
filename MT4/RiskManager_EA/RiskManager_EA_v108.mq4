@@ -982,6 +982,7 @@
 //|   RM_Tools/RM_Snapshot/RM_CooldownEngine/RM_Reports.              |
 //|   v95: BUG-059 - candle timer/session vertical sync throttled + SLOWSTEP diag. v94: UpdateRiskDisplay redraws only when its text changes (BUG-059).|
 //|   v93: + per-section OnTick breakdown ([RM-PERF] TICK BREAKDOWN). |
+//|   v108: R/R + Measure Move start-end line = STYLE_DOT, width 1.       |
 //|   v107: FEAT-063 SESSION expanded High-Low boxes (see changelog).  |
 //|   v107: FEAT-060 market-anchored automatic DST for Key Time/Session|
 //|   boxes (per-day server offset; NOT COMPILED); FEAT-061 Key Time  |
@@ -1010,7 +1011,7 @@
 //|   MagicNumber and base sizing untouched.                          |
 //+------------------------------------------------------------------+
 #property copyright "Risk Manager EA"
-#property version   "107.00"
+#property version   "108.00"
 // v45 (Punch List Round 3, Item 7): custom icon embedded straight into the compiled .ex4 - shows
 // up in the Navigator panel and the Properties/About dialog. RiskManager.ico must sit next to this
 // .mq4 at compile time only; after that it's baked into the .ex4, no external file needed at runtime.

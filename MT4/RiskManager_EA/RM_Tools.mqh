@@ -616,6 +616,8 @@ void CreateFiboRMultiple(string objName, datetime t1, double p1, datetime t2, do
       ObjectSetInteger(0, objName, OBJPROP_LEVELWIDTH, i, 2);  // v34.1 (Mahmoud feedback): was 1, one degree thicker
    }
    ObjectSetInteger(0, objName, OBJPROP_COLOR, lvlColor);
+   ObjectSetInteger(0, objName, OBJPROP_STYLE, STYLE_DOT);   // v108: connecting start-end line = fine dots
+   ObjectSetInteger(0, objName, OBJPROP_WIDTH, 1);
    // v33.1: MQL4 has a known quirk where OBJPROP_RAY_RIGHT alone isn't always honored on
    // programmatically-created OBJ_FIBO objects - setting both properties is the documented
    // workaround (both exist on Fibo; RAY_RIGHT is the one that actually matters here since Fibo
@@ -698,6 +700,8 @@ void CreateFiboMeasureMove(string objName, datetime t1, double p1, datetime t2, 
       ObjectSetInteger(0, objName, OBJPROP_LEVELWIDTH, i, 1);
    }
    ObjectSetInteger(0, objName, OBJPROP_COLOR, lvlColor);
+   ObjectSetInteger(0, objName, OBJPROP_STYLE, STYLE_DOT);   // v108: connecting start-end line = fine dots
+   ObjectSetInteger(0, objName, OBJPROP_WIDTH, 1);
    // Same RAY/RAY_RIGHT workaround as CreateFiboRMultiple() - no ray on either Fibo tool.
    ObjectSetInteger(0, objName, OBJPROP_RAY, false);
    ObjectSetInteger(0, objName, OBJPROP_RAY_RIGHT, false);
