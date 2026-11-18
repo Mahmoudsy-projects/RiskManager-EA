@@ -16,7 +16,7 @@ A risk-management and trade-discipline toolkit for MetaTrader. It is **not** a t
 
 ## Docs
 - `docs/changelogs/` — one changelog per version (Persian).
-- `docs/guide/` — Persian user guide (v107 file = v106 guide + v107 addendum).
+- `docs/guide/` — Persian user guides. MT4: `..._MT4_v108_Hub1.22.pdf` = v106 guide + v107 addendum + v108/Hub 1.22 addendum (latest); older PDFs are kept for history.
 - `docs/reports/` — delivery reports.
 
 ## Tags
