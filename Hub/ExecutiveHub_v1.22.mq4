@@ -40,7 +40,7 @@
 #property description "Drawn shapes/labels are independent, selectable chart"
 #property description "objects that persist even if this indicator is removed -"
 #property description "delete them manually if needed."
-#property version   "1.21"
+#property version   "1.22"   // v1.22: تم Custom به‌جای Original (Custom / S / R، ذخیره‌ی سراسری)
 #property strict
 #property indicator_chart_window
 #property indicator_buffers 7
@@ -398,6 +398,14 @@ int HubLabelFontSize(string t)
 #define THEME_GRID_COUNT 7
 #define THEME_KEEP       ((color)0x02000000)   // «don't touch» marker (Bid/Last for themes 1-3,5-7 and old TO1 Originals)
 #define THEME_ORIG_NAME  PFX+"ThemeOrig"
+//--- v1.22: دکمه‌ی Original برداشته شد و «Custom» جایش آمد: Custom (اعمال) + S (ذخیره‌ی رنگ‌های فعلی چارت) + R (پاک‌کردن). ذخیره در GlobalVariable
+//--- سراسری ترمینال => روی همه‌ی چارت‌ها یکی است و تا R نزنید می‌ماند. BTN_THEME_ORIG فقط برای پاک‌کردن بقایای نسخه‌های قبل نگه داشته شده.
+#define BTN_THEME_CUSTOM PFX+"Btn_Theme_Custom"
+#define BTN_THEME_CSAVE  PFX+"Btn_Theme_CSave"
+#define BTN_THEME_CRESET PFX+"Btn_Theme_CReset"
+#define THEME_CUSTOM_IDX 99
+#define GV_CUSTOM_SET    (PFX + "CustThm_Set")
+#define GV_CUSTOM_FL     (PFX + "CustThm_Fl")
 
 //--- v1.17 (FEAT-052): خواندن رنگ چارت برای محاسبات کنتراست. ChartSetInteger در MT4 ممکن است async باشد (خواندن
 //--- بلافاصله بعدش مقدار قدیمی بدهد)، پس موقع recolour یک‌باره‌ی بعد از کلیک تم، رنگ‌های تازه مستقیم از این override
@@ -572,6 +580,7 @@ void RaiseHubPanelToFront()
    for(int ti = 0; ti < THEME_COUNT; ti++)
       ObjectDelete(0, Theme_BtnName(ti));
    ObjectDelete(0, BTN_THEME_ORIG);
+   ObjectDelete(0, BTN_THEME_CUSTOM); ObjectDelete(0, BTN_THEME_CSAVE); ObjectDelete(0, BTN_THEME_CRESET);   // v1.22
 
    string toolNames[TOOL_COUNT_ITEMS] = {BTN_FA, BTN_FB, BTN_FC, BTN_FD, BTN_HA, BTN_HB, BTN_PATH, BTN_LINE, BTN_PATH2, BTN_LINE2, BTN_HLINE, BTN_DASH};
    for(int i = 0; i < TOOL_COUNT_ITEMS; i++)
@@ -920,6 +929,7 @@ void OnDeinit(const int reason)
    for(int ti = 0; ti < THEME_COUNT; ti++)
       ObjectDelete(0, Theme_BtnName(ti));
    ObjectDelete(0, BTN_THEME_ORIG);
+   ObjectDelete(0, BTN_THEME_CUSTOM); ObjectDelete(0, BTN_THEME_CSAVE); ObjectDelete(0, BTN_THEME_CRESET);   // v1.22
    ObjectDelete(0, HUB_BG_NAME);
 
    //--- ماژول ۱ - POC: فقط دکمه و کرسور تشخیصی پاک می‌شن؛ خطوط POC/LVN/Exhaustion
@@ -3499,6 +3509,74 @@ bool Theme_EnsureOriginalStored()
    return(true);
 }
 
+//--- v1.22: تم Custom - ذخیره‌ی سراسری (GlobalVariable) ۱۳ رنگ + Grid/Shift/AskLine/Mode
+bool Theme_CustomExists()
+{
+   return(GlobalVariableCheck(GV_CUSTOM_SET) && GlobalVariableGet(GV_CUSTOM_SET) != 0.0);
+}
+
+bool Theme_CustomLoad(color &c[], bool &grid, bool &shift, bool &askLine, int &mode)
+{
+   if(!Theme_CustomExists()) return(false);
+   for(int i = 0; i < 13; i++)
+   {
+      string k = PFX + "CustThm_c" + IntegerToString(i);
+      if(!GlobalVariableCheck(k)) return(false);
+      c[i] = (color)(long)GlobalVariableGet(k);
+   }
+   int fl = (int)GlobalVariableGet(GV_CUSTOM_FL);
+   grid    = ((fl & 1) != 0);
+   shift   = ((fl & 2) != 0);
+   askLine = ((fl & 4) != 0);
+   mode    = (fl >> 3) & 3;
+   return(true);
+}
+
+void Theme_CustomSaveCurrent()
+{
+   color c[13]; bool g, s, a; int m;
+   Theme_ReadChart(c, g, s, a, m);
+   for(int i = 0; i < 13; i++)
+      GlobalVariableSet(PFX + "CustThm_c" + IntegerToString(i), (double)(long)c[i]);
+   int fl = (g ? 1 : 0) | (s ? 2 : 0) | (a ? 4 : 0) | ((m & 3) << 3);
+   GlobalVariableSet(GV_CUSTOM_FL, (double)fl);
+   GlobalVariableSet(GV_CUSTOM_SET, 1.0);
+   g_themeActive = THEME_CUSTOM_IDX;
+   Theme_RefreshButtons();
+   ChartRedraw();
+   Print("ExecutiveHub: Custom theme saved from the current chart colours (applies to all charts).");
+}
+
+void Theme_CustomReset()
+{
+   GlobalVariableSet(GV_CUSTOM_SET, 0.0);
+   if(g_themeActive == THEME_CUSTOM_IDX) g_themeActive = -1;
+   Theme_RefreshButtons();
+   ChartRedraw();
+   Print("ExecutiveHub: Custom theme cleared.");
+}
+
+//--- v1.22: اعمال تم Custom (سراسری). اگر هنوز ذخیره نشده فقط پیام می‌دهد.
+void Theme_ApplyCustom()
+{
+   color cc[13]; bool cg, cs, ca; int cm;
+   if(!Theme_CustomLoad(cc, cg, cs, ca, cm))
+   {
+      Print("ExecutiveHub: Custom theme is empty - set your chart colours (F8), then press S to save.");
+      return;
+   }
+   if(!Theme_EnsureOriginalStored())
+   {
+      Print("ExecutiveHub: Theme - could not store the safety copy of the chart colours; Custom was NOT applied.");
+      return;
+   }
+   Theme_WriteChart(cc, cg, cs, ca, cm);
+   g_themeActive = THEME_CUSTOM_IDX;
+   Theme_RecolourOnce(cc[0], cc[1], cc[5], cc[6]);
+   Theme_RefreshButtons();
+   ChartRedraw();
+}
+
 //--- اندیس تمی که رنگ فعلی چارت دقیقاً با آن می‌خواند (Background + Foreground + Bull + Bear) یا -1. فقط در OnInit.
 int Theme_DetectActive()
 {
@@ -3509,6 +3587,12 @@ int Theme_DetectActive()
    for(int i = 0; i < THEME_COUNT; i++)
       if(bg == THEME_BG[i] && fg == THEME_FG[i] && bull == THEME_BULL[i] && bear == THEME_BEAR[i])
          return(i);
+   if(Theme_CustomExists())   // v1.22: اگر چارت با Custom ذخیره‌شده یکی است
+   {
+      color cu[13]; bool cg2, cs2, ca2; int cm2;
+      if(Theme_CustomLoad(cu, cg2, cs2, ca2, cm2) && bg == cu[0] && fg == cu[1] && bull == cu[5] && bear == cu[6])
+         return(THEME_CUSTOM_IDX);
+   }
    return(-1);
 }
 
@@ -3627,7 +3711,10 @@ void Theme_CreateButtons()
    }
    for(int i = 0; i < THEME_COUNT; i++)
       Theme_CreateOneButton(Theme_BtnName(i), IntegerToString(i + 1), 8, "Theme " + IntegerToString(i + 1));
-   Theme_CreateOneButton(BTN_THEME_ORIG, "Original", 6, "Original chart colours (before the first theme)");
+   ObjectDelete(0, BTN_THEME_ORIG);   // v1.22: بقایای نسخه‌ی قبل
+   Theme_CreateOneButton(BTN_THEME_CUSTOM, "Custom", 6, "Custom theme (your saved chart colours, same on all charts)");
+   Theme_CreateOneButton(BTN_THEME_CSAVE,  "S", 7, "SAVE the current chart colours as Custom (set colours first with F8)");
+   Theme_CreateOneButton(BTN_THEME_CRESET, "R", 7, "RESET: clear the saved Custom theme");
    Theme_RefreshButtons();
 }
 
@@ -3650,12 +3737,25 @@ void Theme_RefreshButtons()
       ObjectSetInteger(0, nm, OBJPROP_BGCOLOR, bg);
       ObjectSetInteger(0, nm, OBJPROP_COLOR, (Theme_Lum(bg) > 140) ? clrBlack : clrWhite);
    }
-   if(ObjectFind(0, BTN_THEME_ORIG) >= 0)
+   if(ObjectFind(0, BTN_THEME_CUSTOM) >= 0)   // v1.22
    {
-      ObjectSetInteger(0, BTN_THEME_ORIG, OBJPROP_BORDER_COLOR, CLR_INACTIVE_GRAY);
-      ObjectSetInteger(0, BTN_THEME_ORIG, OBJPROP_BGCOLOR, CLR_INACTIVE_GRAY);
-      ObjectSetInteger(0, BTN_THEME_ORIG, OBJPROP_COLOR, clrWhite);
+      color cbg = CLR_INACTIVE_GRAY;
+      color cu[13]; bool cg, cs, ca; int cm;
+      if(Theme_CustomExists() && Theme_CustomLoad(cu, cg, cs, ca, cm))
+         cbg = (g_themeActive == THEME_CUSTOM_IDX) ? cu[5] : DimColor(cu[5]);
+      bool needB = (MathAbs(Theme_Lum(cbg) - Theme_Lum(HubBgColor)) < 40);
+      ObjectSetInteger(0, BTN_THEME_CUSTOM, OBJPROP_BORDER_COLOR, needB ? (color)C'200,200,200' : cbg);
+      ObjectSetInteger(0, BTN_THEME_CUSTOM, OBJPROP_BGCOLOR, cbg);
+      ObjectSetInteger(0, BTN_THEME_CUSTOM, OBJPROP_COLOR, (Theme_Lum(cbg) > 140) ? clrBlack : clrWhite);
    }
+   string sbtn[2]; sbtn[0] = BTN_THEME_CSAVE; sbtn[1] = BTN_THEME_CRESET;
+   for(int q = 0; q < 2; q++)
+      if(ObjectFind(0, sbtn[q]) >= 0)
+      {
+         ObjectSetInteger(0, sbtn[q], OBJPROP_BORDER_COLOR, CLR_INACTIVE_GRAY);
+         ObjectSetInteger(0, sbtn[q], OBJPROP_BGCOLOR, CLR_INACTIVE_GRAY);
+         ObjectSetInteger(0, sbtn[q], OBJPROP_COLOR, clrWhite);
+      }
 }
 
 void ApplyThemeMinimizedState()
@@ -3663,7 +3763,9 @@ void ApplyThemeMinimizedState()
    long tf = gThemeMinimized ? OBJ_NO_PERIODS : OBJ_ALL_PERIODS;
    for(int i = 0; i < THEME_COUNT; i++)
       ObjectSetInteger(0, Theme_BtnName(i), OBJPROP_TIMEFRAMES, tf);
-   ObjectSetInteger(0, BTN_THEME_ORIG, OBJPROP_TIMEFRAMES, tf);
+   ObjectSetInteger(0, BTN_THEME_CUSTOM, OBJPROP_TIMEFRAMES, tf);   // v1.22
+   ObjectSetInteger(0, BTN_THEME_CSAVE,  OBJPROP_TIMEFRAMES, tf);
+   ObjectSetInteger(0, BTN_THEME_CRESET, OBJPROP_TIMEFRAMES, tf);
    ObjectSetString(0, BTN_MASTER_THEME, OBJPROP_TEXT, gThemeMinimized ? "Theme +" : "Theme −");
    ObjectSetInteger(0, BTN_MASTER_THEME, OBJPROP_BGCOLOR, gThemeMinimized ? CLR_INACTIVE_GRAY : clrSeaGreen);
    //--- (v1.07 lag rule) بدون UpdateHubBackground()/ChartRedraw() - صدازننده‌ها PositionButtons() و یک ChartRedraw() دارند.
@@ -3674,9 +3776,9 @@ void Theme_PositionButtons(int gridX, int row0Y, int row1Y, int masterX)
 {
    // v1.21: all 11 buttons same width (one third of the 4-master row); row 1: 1..4 (grid), row 2: 5,6,7 under the masters then 8,9,10,Original (grid)
    int tw = ThemeBtnW(g_effMasterBtnWidth, g_effBtnGap);
-   for(int i = 0; i <= THEME_COUNT; i++)
+   for(int i = 0; i < THEME_COUNT; i++)   // v1.22: Original حذف شد؛ جایگاه ۱۱ام برای Custom/S/R
    {
-      string nm = (i < THEME_COUNT) ? Theme_BtnName(i) : BTN_THEME_ORIG;
+      string nm = Theme_BtnName(i);
       int x, y;
       if(i < 4)      { x = gridX + i * (tw + g_effBtnGap);         y = row0Y; }
       else if(i < 7) { x = masterX + (i - 4) * (tw + g_effBtnGap); y = row1Y; }
@@ -3686,7 +3788,24 @@ void Theme_PositionButtons(int gridX, int row0Y, int row1Y, int masterX)
       ObjectSetInteger(0, nm, OBJPROP_XSIZE, tw);
       ObjectSetInteger(0, nm, OBJPROP_YSIZE, BtnHeight);
    }
-   ObjectSetInteger(0, BTN_THEME_ORIG, OBJPROP_FONTSIZE, HubLabelFontSize("Original"));
+   // v1.22: جایگاه ستون ۴م ردیف ۲ = Custom (۴۸٪) + S + R
+   int slotX = gridX + 3 * (tw + g_effBtnGap);
+   int mg = 2;
+   int cW = tw * 48 / 100;
+   int sW = (tw - cW - 2 * mg) / 2;
+   int rW = tw - cW - sW - 2 * mg;
+   ObjectSetInteger(0, BTN_THEME_CUSTOM, OBJPROP_XDISTANCE, slotX);
+   ObjectSetInteger(0, BTN_THEME_CUSTOM, OBJPROP_YDISTANCE, row1Y);
+   ObjectSetInteger(0, BTN_THEME_CUSTOM, OBJPROP_XSIZE, cW);
+   ObjectSetInteger(0, BTN_THEME_CUSTOM, OBJPROP_YSIZE, BtnHeight);
+   ObjectSetInteger(0, BTN_THEME_CSAVE, OBJPROP_XDISTANCE, slotX + cW + mg);
+   ObjectSetInteger(0, BTN_THEME_CSAVE, OBJPROP_YDISTANCE, row1Y);
+   ObjectSetInteger(0, BTN_THEME_CSAVE, OBJPROP_XSIZE, sW);
+   ObjectSetInteger(0, BTN_THEME_CSAVE, OBJPROP_YSIZE, BtnHeight);
+   ObjectSetInteger(0, BTN_THEME_CRESET, OBJPROP_XDISTANCE, slotX + cW + mg + sW + mg);
+   ObjectSetInteger(0, BTN_THEME_CRESET, OBJPROP_YDISTANCE, row1Y);
+   ObjectSetInteger(0, BTN_THEME_CRESET, OBJPROP_XSIZE, rW);
+   ObjectSetInteger(0, BTN_THEME_CRESET, OBJPROP_YSIZE, BtnHeight);
 }
 
 void DisarmLabel()
@@ -3932,8 +4051,9 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
       ObjectSetInteger(0, sparam, OBJPROP_STATE, false);
       skipNextClick = true;
       int themeIdx = -2;
-      if(sparam == BTN_THEME_ORIG)
-         themeIdx = -1;
+      if(sparam == BTN_THEME_CUSTOM)        { Theme_ApplyCustom();       return; }   // v1.22
+      else if(sparam == BTN_THEME_CSAVE)    { Theme_CustomSaveCurrent(); return; }
+      else if(sparam == BTN_THEME_CRESET)   { Theme_CustomReset();       return; }
       else
       {
          int themeNum = (int)StringToInteger(StringSubstr(sparam, StringLen(PFX + "Btn_Theme_")));
