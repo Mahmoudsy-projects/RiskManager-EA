@@ -28,7 +28,7 @@
 - **هاب (Hub): تایید شد.** با همان تم D؛ نوار افقی روی چارت با تب‌های Ind · Label · Draw · Theme. رنگ دکمه‌های Draw و ۱۰ تم Theme معنایی است و ثابت می‌ماند. (۵ حالت روی بوم: Ind، Label، Draw، Theme، بسته)
 - **ریز تب‌ها (تایید شد، با تم D):**
   - Trading: منوی Close (CLOSE ALL / CHART / WINNERS / LOSERS)، Half Close All / Profitable Only، حالت Cooldown فعال.
-  - Utility: Tag Trades با مراحل انتخاب ترید (1/4)، Context Checklist (2/4)، انتخاب Setup (4/4) و پنل Mental State.
+  - Utility: Tag Trades با مراحل انتخاب ترید (1/4)، Context Checklist (2/4)، Select Strategy (3/4)، انتخاب Setup (4/4) و پنل Mental State.
   - دکمه‌های Close و Half Close رنگ معنایی کم‌اشباع دارند (قرمز/نارنجی/سبز/قرمز تیره)؛ بقیه خاکستری.
   - جعبه اعلان: «READY TO TRADE» بدون رنگ؛ فقط اعلان Cooldown قرمز؛ «1 trade untagged» خط کوچک قرمز. بلوک Mkt CD / Beh CD بدون رنگ.
   - KEY TIME (تیل) = نسخه کامل، KEY TIME C (آبی) = نسخه کامپکت.
@@ -61,7 +61,7 @@
 ## مراحل باقی‌مانده
 - [x] Hub (تایید شد، 2026-11-18)
 - [x] ریز تب‌های داشبورد و Tag Trades (2026-11-19)
-- [ ] مرحله 3/4 از Tag Trades در اسکرین‌شات‌ها نبود؛ اگر مرحله جداست، طراحی شود
+- [x] مرحله 3/4 Tag Trades (Select Strategy) طراحی شد
 - [ ] حالت‌های تکمیلی باقی‌مانده: پنل جمع‌شده، هشدارهای Daily Drawdown و قفل‌ها
 - [ ] تایید نهایی کل طراحی
 - [ ] پیاده‌سازی در نسخه جدا (v108) و تست
