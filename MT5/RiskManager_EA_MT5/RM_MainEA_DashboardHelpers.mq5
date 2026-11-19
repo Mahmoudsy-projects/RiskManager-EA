@@ -15,15 +15,15 @@
 
 // --- ثابت‌های رنگ/زمان‌بندی/چیدمان (از main .mq4، بدون تغییر) ---
 #define BTN_FLASH_MS     5000
-#define CLR_BTN_DEFAULT  C'70,70,80'
-#define CLR_TOOLS_ACTIVE C'0,150,150'
-#define CLR_FLASH_BE     C'150,80,200'
-#define CLR_FLASH_HALF   C'210,175,20'
-#define CLR_FLASH_FULL   C'200,60,140'
+#define CLR_BTN_DEFAULT  TH_BTN
+#define CLR_TOOLS_ACTIVE TH_ACTIVE
+#define CLR_FLASH_BE     TH_FLASH_BE
+#define CLR_FLASH_HALF   TH_FLASH_HALF
+#define CLR_FLASH_FULL   TH_FLASH_FULL
 
-#define CLR_NEUTRAL      C'190,190,195'
-#define CLR_APPROACHING  clrOrange
-#define CLR_BREACHED     clrRed
+#define CLR_NEUTRAL      TH_NEUTRAL
+#define CLR_APPROACHING  TH_ORANGE
+#define CLR_BREACHED     TH_RED
 #define WARN_RATIO       0.85
 
 #define RISK_BG_FULL      C'55,55,62'
@@ -48,7 +48,7 @@
 #define RR_BORDER_HI_G 235
 #define RR_BORDER_HI_B 240
 
-#define MP_BASE_GREY     C'142,142,158'
+#define MP_BASE_GREY     TH_MP_BASE
 
 #define PERF_MONO_CHAR_RATIO 0.78
 #define ARIALBOLD_CHAR_RATIO 0.68
@@ -70,7 +70,7 @@
 #define ACTION_MSG_SECONDS 4
 
 // --- state globals RM_Dashboard.mq5 reads/writes but doesn't own ---
-enum EDashboardMode { DASH_TRADING, DASH_UTILITY };
+enum EDashboardMode { DASH_TRADING, DASH_UTILITY, DASH_REPORTS };   // v110 P2: third tab (Reports) - ordinal 2
 int      g_statusBoxTop = 0;
 datetime g_actionMsgUntil = 0;
 double   g_layoutScale = 1.0;

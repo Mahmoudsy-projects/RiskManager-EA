@@ -2904,8 +2904,8 @@ bool IsOnTagWindow(int x, int y)
    if(g_tagStep==3)
    {
       int mentalStateRows = 4;   // هدر + ۲ ردیف دکمه + Clear (همون عدد قبلی، فقط جابه‌جا شده)
-      int mentalWinW    = winW;
-      int mentalWinX    = MathMax(0, winX - mentalWinW - GP);
+      int mentalWinW    = winW - ((g_themeId==RM_THEME_MONO) ? SC(20) : 0);   // v110 P4h: مثل BuildTagWindow()
+      int mentalWinX    = MathMax(0, winX - mentalWinW - GP - ((g_themeId==RM_THEME_MONO) ? SC(3) : 0));
       int mentalWinY    = winY;
       int mentalTotalH  = pad + mentalStateRows*(rowH+pad) + pad;
       if(x>=mentalWinX && x<=mentalWinX+mentalWinW && y>=mentalWinY && y<=mentalWinY+mentalTotalH) return true;
@@ -2951,15 +2951,16 @@ void BuildScaleInPicker()
    int n = ArraySize(g_scCandRoot);
    int totalH = pad + hdrH + pad + (n>0 ? n : 1)*(rowH+pad) + pad;
 
-   RectC(SCL_WIN_PREFIX+"BG", winX, winY, winW, totalH, C'25,25,32', corner);
+   RectWin(SCL_WIN_PREFIX+"BG", winX, winY, winW, totalH, corner);
+   winX += RM_WinInset(); winW -= 2*RM_WinInset();   // v110 P4h
    int cy = winY + pad;
-   BtnC(SCL_WIN_PREFIX+"HDR",   winX,             cy, winW-SC(24)-pad, hdrH, "Scale-in - pick a trade", C'85,55,130', corner, 7);
-   BtnC(SCL_WIN_PREFIX+"CLOSE", winX+winW-SC(24), cy, SC(24),          hdrH, "X",                       C'120,40,40', corner, 8);
+   BtnC(SCL_WIN_PREFIX+"HDR",   winX,             cy, winW-SC(24)-pad, hdrH, "Scale-in - pick a trade", TH_SCALEIN_HDR, corner, 7);
+   BtnC(SCL_WIN_PREFIX+"CLOSE", winX+winW-SC(24), cy, SC(24),          hdrH, "X",                       TH_XBTN, corner, 8);
    cy += hdrH + pad;
 
    if(n == 0)
    {
-      LblCC(SCL_WIN_PREFIX+"EMPTY", winX, cy, winW, rowH, "No eligible trade", clrSilver, 7, false, corner);
+      LblCC(SCL_WIN_PREFIX+"EMPTY", winX, cy, winW, rowH, "No eligible trade", TH_SILVER, 7, false, corner);
       return;
    }
    for(int i=0;i<n;i++)
@@ -2967,7 +2968,7 @@ void BuildScaleInPicker()
       int root = g_scCandRoot[i];
       string tag = ShortTagText(GetTagStrategy(root), 8);
       string lbl = "#"+IntegerToString(root)+" "+(g_scCandBuy[i]?"B":"S")+" "+DoubleToStr(g_scCandEntry[i],Digits)+" $"+DoubleToStr(g_scCandCap[i],0)+(tag!="N/A" ? " "+tag : "");
-      BtnC(SCL_WIN_PREFIX+"ROW_"+IntegerToString(i), winX, cy, winW, rowH, lbl, C'60,60,70', corner, 7);
+      BtnC(SCL_WIN_PREFIX+"ROW_"+IntegerToString(i), winX, cy, winW, rowH, lbl, TH_ROW, corner, 7);
       cy += rowH + pad;
    }
 }
@@ -3125,7 +3126,10 @@ void BuildTagWindow()
    int totalH    = pad + hdrH + pad + backRows*(rowH+pad) + contentRows*(rowH+pad) + pad;
 
    // --- فاز ۲: BG اول (طبق قرارداد پروژه - draw order، نه فقط ZORDER)، بعد محتوا روش ---
-   RectC(TAG_WIN_PREFIX+"BG", winX, winY, winW, totalH, C'25,25,32', corner);
+   RectWin(TAG_WIN_PREFIX+"BG", winX, winY, winW, totalH, corner);
+   int tagIns = RM_WinInset();                          // v110 P4h: ابعاد بیرونیِ اصلی برای پنجره‌ی Mental State
+   int tagOuterX = winX, tagOuterW = winW;
+   winX += tagIns; winW -= 2*tagIns;
 
    int cy = winY + pad;
 
@@ -3133,14 +3137,15 @@ void BuildTagWindow()
    string hdrText = (g_tagStep==0) ? "Tag Trade - 1/4: Select Trade" :
                      (g_tagStep==1) ? "Tag Trade - 2/4: Context Checklist" :
                      (g_tagStep==2) ? "Tag Trade - 3/4: Select Strategy" :
-                                      "Tag Trade - 4/4: Select Setup ("+g_tagSelectedStrategy+")";
-   BtnC(TAG_WIN_PREFIX+"HDR",   winX,               cy, winW-SC(24)-pad, hdrH, hdrText, C'50,54,68', corner, 7);
-   BtnC(TAG_WIN_PREFIX+"CLOSE", winX+winW-SC(24),   cy, SC(24),          hdrH, "X",     C'120,40,40', corner, 8);
+                                      "Tag Trade - 4/4: Select Setup";   // v110 P4h: عنوان‌ها مطابق ماکاپ V6
+   BtnC(TAG_WIN_PREFIX+"HDR",   winX,               cy, winW-SC(24)-pad, hdrH, hdrText, TH_HDR, corner, 7);
+   BtnC(TAG_WIN_PREFIX+"CLOSE", winX+winW-SC(24),   cy, SC(24),          hdrH, "X",     TH_XBTN, corner, 8);
+   FitBtnFontHalf(TAG_WIN_PREFIX+"HDR", hdrText, winW-SC(24)-pad, 7);   // v110 P4h: متن عنوان بیرون نزند
    cy += hdrH + pad;
 
    if(g_tagStep>0)
    {
-      BtnC(TAG_WIN_PREFIX+"BACK", winX, cy, winW, rowH, "<< BACK", C'70,70,80', corner, 7);
+      BtnC(TAG_WIN_PREFIX+"BACK", winX, cy, winW, rowH, "<< BACK", TH_ROW2, corner, 7);
       cy += rowH + pad;
    }
 
@@ -3148,7 +3153,7 @@ void BuildTagWindow()
    {
       if(todayCount==0)
       {
-         LblCC(TAG_WIN_PREFIX+"EMPTY", winX, cy, winW, rowH, "No trades today", clrSilver, 7, false, corner);
+         LblCC(TAG_WIN_PREFIX+"EMPTY", winX, cy, winW, rowH, "No trades today", TH_SILVER, 7, false, corner);
          cy += rowH + pad;
       }
       else
@@ -3161,7 +3166,7 @@ void BuildTagWindow()
          // live-update جداگانه‌ای نداره.
          for(int i=0;i<todayCount;i++)
          {
-            color rowColor = (GetTagStrategy(g_tagTodayTickets[i])!="N/A") ? CLR_TOOLS_ACTIVE : C'60,60,70';
+            color rowColor = (GetTagStrategy(g_tagTodayTickets[i])!="N/A") ? CLR_TOOLS_ACTIVE : TH_ROW;
             BtnC(TAG_WIN_PREFIX+"TRADE_"+IntegerToString(i), winX, cy, winW, rowH, todayLabels[i], rowColor, corner, 7);
             cy += rowH + pad;
          }
@@ -3176,11 +3181,11 @@ void BuildTagWindow()
       ctxSel[0]=g_ctxSelLevel; ctxSel[1]=g_ctxSelCycle; ctxSel[2]=g_ctxSelTime; ctxSel[3]=g_ctxSelCandle; ctxSel[4]=g_ctxSelNone;
       for(int i=0;i<5;i++)
       {
-         color cColor = ctxSel[i] ? CLR_TOOLS_ACTIVE : C'60,60,70';
+         color cColor = ctxSel[i] ? CLR_TOOLS_ACTIVE : TH_ROW;
          BtnC(TAG_WIN_PREFIX+"CTX_"+IntegerToString(i), winX, cy, winW, rowH, g_ctxLabels[i], cColor, corner, 7);
          cy += rowH + pad;
       }
-      BtnC(TAG_WIN_PREFIX+"CTX_NEXT", winX, cy, winW, rowH, "NEXT >>", C'70,70,80', corner, 7);
+      BtnC(TAG_WIN_PREFIX+"CTX_NEXT", winX, cy, winW, rowH, "NEXT >>", TH_ROW2, corner, 7);
       cy += rowH + pad;
    }
    else if(g_tagStep==2)
@@ -3191,14 +3196,14 @@ void BuildTagWindow()
       string existStrat = GetTagStrategy(g_tagSelectedTicket);
       for(int i=0;i<g_stratCount;i++)
       {
-         color stratColor = (existStrat!="N/A" && g_stratNames[i]==existStrat) ? CLR_TOOLS_ACTIVE : C'60,60,70';
+         color stratColor = (existStrat!="N/A" && g_stratNames[i]==existStrat) ? CLR_TOOLS_ACTIVE : TH_ROW;
          BtnC(TAG_WIN_PREFIX+"STRAT_"+IntegerToString(i), winX, cy, winW, rowH, g_stratNames[i], stratColor, corner, 7);
          cy += rowH + pad;
       }
       // v56.5 (Mahmoud - تصمیم نهایی): دیگه هیچ OBJ_EDIT/ADD ای این‌جا نیست (ببین توضیح کامل
       // بالای OpenTagWindow()) - فقط یه لیبل غیرقابل‌کلیک راهنما، هم‌رده‌ی همون کلاس محدودیت‌های
       // مستندشده‌ی پروژه (مثل سقف RR=5). افزودن Strategy جدید = ادیت مستقیم RM_StrategySetups.txt.
-      LblCC(TAG_WIN_PREFIX+"STRAT_HINT", winX, cy, winW, rowH, "Add new: edit RM_StrategySetups.txt", clrSilver, 6, false, corner);
+      LblCC(TAG_WIN_PREFIX+"STRAT_HINT", winX, cy, winW, rowH, "Add new: edit RM_StrategySetups.txt", TH_SILVER, 6, false, corner);
       cy += rowH + pad;
    }
    else // g_tagStep==3
@@ -3212,12 +3217,12 @@ void BuildTagWindow()
       bool   sameStratAsExisting = (existStrat2!="N/A" && existStrat2==g_tagSelectedStrategy);
       for(int i=0;i<setupsCount;i++)
       {
-         color setupColor = (sameStratAsExisting && setupsList[i]==existSetup) ? CLR_TOOLS_ACTIVE : C'60,60,70';
+         color setupColor = (sameStratAsExisting && setupsList[i]==existSetup) ? CLR_TOOLS_ACTIVE : TH_ROW;
          BtnC(TAG_WIN_PREFIX+"SETUP_"+IntegerToString(i), winX, cy, winW, rowH, setupsList[i], setupColor, corner, 7);
          cy += rowH + pad;
       }
       // v56.5: همون توضیح بالا - راهنمای غیرقابل‌کلیک به‌جای Edit/Add
-      LblCC(TAG_WIN_PREFIX+"SETUP_HINT", winX, cy, winW, rowH, "Add new: edit RM_StrategySetups.txt", clrSilver, 6, false, corner);
+      LblCC(TAG_WIN_PREFIX+"SETUP_HINT", winX, cy, winW, rowH, "Add new: edit RM_StrategySetups.txt", TH_SILVER, 6, false, corner);
       cy += rowH + pad;
    }
 
@@ -3238,15 +3243,18 @@ void BuildTagWindow()
    if(g_tagStep==3)  // FEAT-037 (v81): قبلاً g_tagStep==2 بود - با شیفت شماره‌ی استپ‌ها عوض شد
    {
       int mentalStateRows = 4;   // هدر + ۲ ردیف دکمه (۳تایی، جمعاً ۶ گزینه) + Clear
-      int mentalWinW   = winW;   // همون عرض پنجره‌ی اصلی (PW) - "هم‌الگو"ی خواسته‌شده در تسک
-      int mentalWinX   = MathMax(0, winX - mentalWinW - GP);  // چسبیده به چپِ پنجره‌ی اصلی؛ کلمپ به ۰ روی چارت خیلی باریک
+      // v110 P4h: قاب بیرونی Mental State (Mono: ۲۰ پیکسل باریک‌تر از پنل، فاصله‌ی ۸ از پنجره‌ی Tag)؛ هم‌فرمول با IsOnTagWindow()
+      int mOuterW = tagOuterW - ((g_themeId==RM_THEME_MONO) ? SC(20) : 0);
+      int mOuterX = MathMax(0, tagOuterX - mOuterW - GP - ((g_themeId==RM_THEME_MONO) ? SC(3) : 0));
       int mentalWinY   = winY;   // هم‌سطح با لبه‌ی بالای پنجره‌ی اصلی
       int mentalTotalH = pad + mentalStateRows*(rowH+pad) + pad;
 
-      RectC(TAG_WIN_PREFIX+"MW_BG", mentalWinX, mentalWinY, mentalWinW, mentalTotalH, C'25,25,32', corner);
+      RectWin(TAG_WIN_PREFIX+"MW_BG", mOuterX, mentalWinY, mOuterW, mentalTotalH, corner);
+      int mentalWinW = mOuterW - 2*tagIns;      // ناحیه‌ی دکمه‌ها (inset)
+      int mentalWinX = mOuterX + tagIns;
 
       int cy2 = mentalWinY + pad;
-      LblCC(TAG_WIN_PREFIX+"MENTAL_HDR", mentalWinX, cy2, mentalWinW, rowH, "Mental State:", clrSilver, 7, false, corner);
+      LblCC(TAG_WIN_PREFIX+"MENTAL_HDR", mentalWinX, cy2, mentalWinW, rowH, "Mental State:", TH_SILVER, 7, false, corner);
       cy2 += rowH + pad;
 
       string mentalOpts[];
@@ -3269,7 +3277,7 @@ void BuildTagWindow()
             string mName = TAG_WIN_PREFIX+"MENTAL_"+IntegerToString(mi);
             // v69: همون pattern هایلایت که تسک خواسته - رنگ فعال یکسان با رنگ ردیف‌های تگ‌خورده‌ی
             // TRADE_ بالا (CLR_TOOLS_ACTIVE)، نه یه رنگ جدید.
-            color mColor = (g_tagSelectedMentalState==mentalOpts[mi]) ? CLR_TOOLS_ACTIVE : C'60,60,70';
+            color mColor = (g_tagSelectedMentalState==mentalOpts[mi]) ? CLR_TOOLS_ACTIVE : TH_ROW;
             BtnC(mName, rx, cy2, mColW[c], rowH, mentalOpts[mi], mColor, corner, 6);
             FitBtnFontHalf(mName, mentalOpts[mi], mColW[c], 6);
             rx += mColW[c] + GP;
@@ -3277,7 +3285,7 @@ void BuildTagWindow()
          cy2 += rowH + pad;
       }
 
-      BtnC(TAG_WIN_PREFIX+"MENTAL_CLEAR", mentalWinX, cy2, mentalWinW, rowH, "Clear", C'70,70,80', corner, 7);
+      BtnC(TAG_WIN_PREFIX+"MENTAL_CLEAR", mentalWinX, cy2, mentalWinW, rowH, "Clear", TH_ROW2, corner, 7);
       cy2 += rowH + pad;
    }
 

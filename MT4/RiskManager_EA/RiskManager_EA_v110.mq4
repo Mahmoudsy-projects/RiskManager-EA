@@ -1011,7 +1011,7 @@
 //|   MagicNumber and base sizing untouched.                          |
 //+------------------------------------------------------------------+
 #property copyright "Risk Manager EA"
-#property version   "109.00"
+#property version   "110.00"
 // v45 (Punch List Round 3, Item 7): custom icon embedded straight into the compiled .ex4 - shows
 // up in the Navigator panel and the Properties/About dialog. RiskManager.ico must sit next to this
 // .mq4 at compile time only; after that it's baked into the .ex4, no external file needed at runtime.
@@ -1061,7 +1061,7 @@ double g_effMaxMonthlyDD  = 0;
 
 enum EStep { STEP_IDLE, STEP_ENTRY, STEP_SL };
 enum EMode { MODE_MARKET, MODE_PENDING };
-enum EDashboardMode { DASH_TRADING, DASH_UTILITY };  // v31: renamed from DASH_FULL/DASH_COMPACT (Dashboard Architecture: Trading + Utility Split) - ordinal values unchanged (0/1), so GV_DASH_MODE persistence needs no migration
+enum EDashboardMode { DASH_TRADING, DASH_UTILITY, DASH_REPORTS };  // v110 P2: third tab (Reports) - ordinal 2  // v31: renamed from DASH_FULL/DASH_COMPACT (Dashboard Architecture: Trading + Utility Split) - ordinal values unchanged (0/1), so GV_DASH_MODE persistence needs no migration
 
 EStep   g_step       = STEP_IDLE;
 EMode   g_mode       = MODE_MARKET;
@@ -1084,11 +1084,12 @@ uint    g_halfFlashEnd = 0;
 uint    g_fullFlashEnd = 0;
 uint    g_exportFlashEnd = 0;  // v60 (EXPORT CSV Feedback): همون الگوی flash بالا، اما با رنگ CLR_TOOLS_ACTIVE (فیروزه‌ای) به‌جای رنگ اختصاصی، چون این دکمه Action است نه یه دکمه‌ی خطرناک/متمایز مثل BE/Half/Full
 #define BTN_FLASH_MS    5000
-#define CLR_BTN_DEFAULT C'70,70,80'     // resting grey - matches every other one-shot action button
-#define CLR_TOOLS_ACTIVE C'0,150,150'   // v42 (Punch List, Item 1.4): the same active teal already used by Auto Trail/Candle Timer/BE Ref Line/Daily-Weekly-Monthly H-L - Show Objects and the two Fibo tools now match it too
-#define CLR_FLASH_BE    C'150,80,200'   // purple - distinct from blue(Market)/orange(Pending)/teal(Trail)/red(danger)
-#define CLR_FLASH_HALF  C'210,175,20'   // gold - distinct from CLR_APPROACHING(orange) and Pending's orange
-#define CLR_FLASH_FULL  C'200,60,140'   // magenta - distinct from the submenu's red/green Close options
+#include "RM_Theme.mqh"   // v110: جدول رنگ تم (Phase 1 - بدون تغییر ظاهر)
+#define CLR_BTN_DEFAULT TH_BTN     // resting grey - matches every other one-shot action button
+#define CLR_TOOLS_ACTIVE TH_ACTIVE   // v42 (Punch List, Item 1.4): the same active teal already used by Auto Trail/Candle Timer/BE Ref Line/Daily-Weekly-Monthly H-L - Show Objects and the two Fibo tools now match it too
+#define CLR_FLASH_BE    TH_FLASH_BE   // purple - distinct from blue(Market)/orange(Pending)/teal(Trail)/red(danger)
+#define CLR_FLASH_HALF  TH_FLASH_HALF   // gold - distinct from CLR_APPROACHING(orange) and Pending's orange
+#define CLR_FLASH_FULL  TH_FLASH_FULL   // magenta - distinct from the submenu's red/green Close options
 int     g_statusBoxTop = 0;   // v2: موقعیت بالای کادر وضعیت - برای وسط‌چین کردن پویا متن Ready
 datetime g_actionMsgUntil = 0; // v8 (BUG-011): تا این لحظه پیام اکشن لحظه‌ای روی نوار وضعیت می‌مونه؛ بعدش UpdateSystemStatus() وضعیت دائمی رو جایگزین می‌کنه
 #define  ACTION_MSG_SECONDS 4  // v8 (BUG-011): مدت نمایش پیام اکشن قبل از برگشت خودکار به وضعیت دائمی (ثانیه)
@@ -1108,7 +1109,7 @@ double  g_riskReward = 2.0;        // v9.7: مقدار زنده‌ی RR - از �
 datetime g_dayStart  = 0;
 
 // === v27: Dashboard Layout Restructuring (Performance drawer) ===
-bool    g_perfDrawerOpen = true;   // expand/collapse state of the "📊 Performance" box - intentionally NOT persisted, but unlike Tools it defaults to OPEN on every EA attach (per spec: important enough to be visible at a glance)
+bool    g_perfDrawerOpen = false;  // v110 P2: Performance left the Trading tab (now static inside Reports) - kept only so the Close-submenu code that saves/restores it stays valid;    // expand/collapse state of the "📊 Performance" box - intentionally NOT persisted, but unlike Tools it defaults to OPEN on every EA attach (per spec: important enough to be visible at a glance)
 
 // === v28 (Dashboard Visual Polish Part 1) ===
 // Change 7: remembers whether the Performance box was open right before the Close submenu forced
@@ -1299,9 +1300,9 @@ int ALERT_PAD;
 // no forbidden zone stay permanently grey (CLR_NEUTRAL) regardless of sign. This is a distinct
 // mechanism from the existing toggle/selection coloring (FULL/COMPACT, MARKET/PENDING, BE/Half
 // Close/Full Close/Trailing, Close submenu), which is untouched by this version.
-#define CLR_NEUTRAL      C'190,190,195'   // grey - normal, no forbidden zone, or zone not yet approached
-#define CLR_APPROACHING  clrOrange        // orange - approaching the forbidden zone
-#define CLR_BREACHED     clrRed           // red - forbidden zone reached / locked
+#define CLR_NEUTRAL      TH_NEUTRAL   // grey - normal, no forbidden zone, or zone not yet approached
+#define CLR_APPROACHING  TH_ORANGE        // orange - approaching the forbidden zone
+#define CLR_BREACHED     TH_RED           // red - forbidden zone reached / locked
 #define WARN_RATIO       0.85             // fraction of the limit at which "approaching" (orange) begins
 
 // v29 revision 3 (Mahmoud feedback - Risk/RR are SETTINGS, not actions): the previous revision's
@@ -1341,7 +1342,7 @@ int ALERT_PAD;
 // Market/Pending are the panel's primary action buttons - kept ~2-3 brightness levels lighter
 // than the rest of the grey controls (C'70,70,80') so they naturally attract the eye without
 // needing an accent color while inactive. Accent colors (blue/orange) still apply when selected.
-#define MP_BASE_GREY     C'142,142,158'  // v30 (Part 2): brightened further from v29's C'105,105,118' - Mahmoud found that still not visible enough at a glance; selected-state blue/orange accents (C'30,130,220'/C'190,140,0') are unchanged
+#define MP_BASE_GREY     TH_MP_BASE  /* v110 P3 - was C'142,142,158' */ //  // v30 (Part 2): brightened further from v29's C'105,105,118' - Mahmoud found that still not visible enough at a glance; selected-state blue/orange accents (C'30,130,220'/C'190,140,0') are unchanged
 
 
 #define PERF_MONO_CHAR_RATIO 0.78  // v36: نسبت پهنای مونواسپیس (Consolas) به فونت‌سایز - از نسبت
@@ -1485,6 +1486,7 @@ int OnInit()
    // اولین خط OnInit() - قبل از هر Load*()ای که ممکنه در طول یک reconnect کند (حساب واقعی) روی
    // AccountBalance()/تاریخچه‌ی سفارش‌ها مقدار ناپایدار/موقت بخونه. مبنای پنجره‌ی Grace Period
    // (CheckDrawdownLimits در RM_DrawdownEngine.mqh) دقیقاً از همین لحظه شمرده می‌شه.
+   RM_ThemeInit((int)DashTheme);                 // v110: جدول رنگ تم باید قبل از هر چیزی مقداردهی شود
    g_eaStartupTime = TimeCurrent();
    // v77 (Pattern B fix): کلیدهای حساب‌محور رو با AccountNumber()ِ زنده بازبساز - قبل از هر Load*State
    // و قبل از PatternBDiag. این تنها نقطه‌ای‌ست که سوییچِ حساب (OnInit بدونِ reloadِ برنامه) رو خنثی می‌کنه.
@@ -2417,6 +2419,19 @@ void RM_OnChartEventImpl(const int id, const long &lp, const double &dp, const s
          return;
       }
 
+      // v110 P2: Reports tab
+      if(sp == P+"BTN_DASH_REPORTS" && (g_dashboardMode != DASH_REPORTS || g_minimized))
+      {
+         g_dashboardMode = DASH_REPORTS;
+         g_minimized = false;
+         SaveDashboardModeState();
+         ObjectsDeleteAll(0, P);
+         BuildPanel();
+         SetStatus("Dashboard: Reports", clrLimeGreen);
+         ChartRedraw();
+         return;
+      }
+
       // v90 (FEAT-044): انتخابگر Scale-in باز بود و تریدر مستقیم MARKET/PENDING زد -> انتخابگر بسته و Scale-in خاموش (ورود عادی)
       if((sp==P+"BTN_MARKET" || sp==P+"BTN_PENDING") && g_scaleInPickerOpen)
       { CloseScaleInPicker(); UpdateScaleInButton(); }
@@ -2493,33 +2508,7 @@ void RM_OnChartEventImpl(const int id, const long &lp, const double &dp, const s
          SetStatus(RiskStepName(g_riskStep)+" Risk selected", (g_riskStep==0) ? C'170,30,30' : C'220,90,90');
       }
 
-      // v27 (Change 2): "📊 Performance" box header - expand/collapse changes panel height (bodyH),
-      // same rebuild pattern as BTN_TOOLS below (and BTN_DASH_TRADING/UTILITY above).
-      if(sp == P+"BTN_PERF")
-      {
-         g_perfDrawerOpen = !g_perfDrawerOpen;
-         ObjectsDeleteAll(0, P);
-         BuildPanel();
-         SetStatus(g_perfDrawerOpen ? "Performance: expanded" : "Performance: collapsed", C'150,160,180');
-         ChartRedraw();
-         return;
-      }
-
-      // v43 (Item 3): BTN_TOOLS click handler removed entirely - "Tools" is now a static section
-      // separator only (buttons below it are always visible, no expand/collapse), so clicking the
-      // header itself does nothing.
-
-      // v35 (Utility Phase A, Part 2): "Trading Reports" drawer header - expand/collapse changes
-      // panel height (bodyH), so it needs a full rebuild, same pattern as BTN_TOOLS/BTN_PERF above.
-      if(sp == P+"BTN_REPORTS")
-      {
-         g_reportsDrawerOpen = !g_reportsDrawerOpen;
-         ObjectsDeleteAll(0, P);
-         BuildPanel();
-         SetStatus(g_reportsDrawerOpen ? "Trading Reports: expanded" : "Trading Reports: collapsed", C'150,160,180');
-         ChartRedraw();
-         return;
-      }
+      // v110 P2: BTN_PERF / BTN_REPORTS are static headers now (no collapse) - handlers removed.
 
       // v35: Daily/Weekly/Monthly report tabs - only change which period's stats are shown, same
       // row count/panel height either way, so (like BTN_CANDLETIMER etc. below) no full rebuild is
@@ -3261,14 +3250,14 @@ int BestFitMonoFont(int len, int boxW)
 void SetStatus(string msg,color clr)
 { 
    ObjectSetString(0,P+"L_STATUS",OBJPROP_TEXT,msg); 
-   ObjectSetInteger(0,P+"L_STATUS",OBJPROP_COLOR,clr); 
+   ObjectSetInteger(0,P+"L_STATUS",OBJPROP_COLOR,RM_Txt(clr)); 
    FitBoxFont(P+"L_STATUS", msg); // v8 (BUG-014)
    ObjectSetString(0,P+"L_STATUS2",OBJPROP_TEXT,"");
    // v2: خط دوم خالیه، پس متن خط اول رو دقیقاً وسط کادر قرار بده (نه چسبیده به بالا)
    // v28 revision 2: 15->12 (half of STATUS_H=24, was 30)
    // v43 (Item 4): +ALERT_PAD added - row1's slot now starts ALERT_PAD below the box top instead
    // of flush with it (see BuildPanel()), so centering has to account for that offset too.
-   ObjectSetInteger(0,P+"L_STATUS",OBJPROP_YDISTANCE, g_statusBoxTop + ALERT_PAD + SC(12));
+   ObjectSetInteger(0,P+"L_STATUS",OBJPROP_YDISTANCE, g_statusBoxTop + SC(17));
    // v8 (BUG-011): این یک پیام اکشن لحظه‌ایه - چند ثانیه نمایش داده می‌شه و بعدش
    // UpdateSystemStatus() خودکار وضعیت دائمی سیستم رو جایگزینش می‌کنه
    g_actionMsgUntil = TimeCurrent() + ACTION_MSG_SECONDS;
@@ -3279,19 +3268,19 @@ void SetStatus(string msg,color clr)
 void SetStatus2(string msg,color clr)
 {
    ObjectSetString(0,P+"L_STATUS2",OBJPROP_TEXT,msg);
-   ObjectSetInteger(0,P+"L_STATUS2",OBJPROP_COLOR,clr);
+   ObjectSetInteger(0,P+"L_STATUS2",OBJPROP_COLOR,RM_Txt(clr));
    if(msg != "")
    {
       // v2: وقتی خط دوم پر می‌شه، خط اول رو کمی بالاتر و خط دوم رو پایین‌تر بچین (دو خط متقارن)
       // v28 revision 2: 15/7 -> 12/6 (matches STATUS_H=24, was 30)
       // v43 (Item 4): +ALERT_PAD, same reasoning as SetStatus() above.
-      ObjectSetInteger(0,P+"L_STATUS",  OBJPROP_YDISTANCE, g_statusBoxTop + ALERT_PAD + SC(12) - SC(6));
-      ObjectSetInteger(0,P+"L_STATUS2", OBJPROP_YDISTANCE, g_statusBoxTop + ALERT_PAD + SC(12) + SC(6));
+      ObjectSetInteger(0,P+"L_STATUS",  OBJPROP_YDISTANCE, g_statusBoxTop + SC(10));
+      ObjectSetInteger(0,P+"L_STATUS2", OBJPROP_YDISTANCE, g_statusBoxTop + SC(24));
    }
    else
    {
       // v2: خط دوم دوباره خالی شد - خط اول رو برگردون وسط کادر
-      ObjectSetInteger(0,P+"L_STATUS", OBJPROP_YDISTANCE, g_statusBoxTop + ALERT_PAD + SC(12));
+      ObjectSetInteger(0,P+"L_STATUS", OBJPROP_YDISTANCE, g_statusBoxTop + SC(17));
    }
    ChartRedraw();
 }

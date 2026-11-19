@@ -5,7 +5,7 @@
 //| No stubs remain anywhere in this build.                          |
 //+------------------------------------------------------------------+
 #property copyright   "Risk Manager EA"
-#property version     "75.16"   // v75.14 (FEAT-037 چک‌لیست کانتکست - P5). v75.13 (Scale-in + ریشه‌ی زنجیره + FEAT-045 خط ریسک)
+#property version     "75.17"   // v75.14 (FEAT-037 چک‌لیست کانتکست - P5). v75.13 (Scale-in + ریشه‌ی زنجیره + FEAT-045 خط ریسک)
 #property description "A discipline enforcement engine, not a predictive tool."
 #property description "Focuses on what can be controlled: risk, behavior, execution."
 #property description "1. Mathematical: sizing, capital preservation, D/W/M limits, Emergency Stop."
@@ -169,6 +169,7 @@ bool TicketInList(ulong ticket, const ulong &arr[])
 // ============================================================
 #include "RM_Config.mq5"
 #include "RM_RiskCalc.mq5"
+#include "RM_Theme.mq5"   // v75.17 (MT4 v110): theme colour table
 #include "RM_MainEA_DashboardHelpers.mq5"
 
 // ============================================================

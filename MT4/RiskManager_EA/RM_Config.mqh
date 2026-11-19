@@ -183,6 +183,12 @@ enum ELayoutScale
    LAYOUT_90  = 90,   // 90%
    LAYOUT_80  = 80    // 80%
 };
+enum EDashTheme
+{
+   THEME_MONO    = 1,   // Mono Gray (New - light)
+   THEME_CLASSIC = 0    // Classic (dark)
+};
+input EDashTheme DashTheme = THEME_MONO; // Dashboard theme (EA restart to change)
 input ELayoutScale LayoutScale = LAYOUT_100; // Dashboard size - applies to Trading + Utility (EA restart to change)
 
 // v68 (بازطراحی v67 طبق فیدبک محمود): از یه ساعت ثابت روزانه به export بعد از هر بسته‌شدن
