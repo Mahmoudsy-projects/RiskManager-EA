@@ -5,3 +5,4 @@ Theme D "Mono Gray" (input `DashTheme` / `HubDesign`; Classic = old dark look). 
 - MT4 Hub 1.23 (ExecutiveHub_v1.23.mq4, v1.22 kept): themed bar, raised buttons via static underlays.
 - MT5 EA v75.17 (RM_Theme.mq5 added) + MT5 Hub 1.17: same look. MT5 specifics: button fonts 8pt (small sizes render pixelated), Segoe UI Bold in Hub.
 - Known notes: no per-tick cost added (static underlays); Hub shadows must never have OBJPROP_TIMEFRAMES toggled (re-orders them above buttons).
+- Hub fix: objects created by Risk Manager (names starting with RM) no longer trigger a Hub raise (fixes Hub tabs flashing when the RM panel is minimized/restored).

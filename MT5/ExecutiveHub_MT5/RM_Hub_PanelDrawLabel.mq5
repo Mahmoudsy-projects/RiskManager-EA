@@ -405,6 +405,9 @@ bool IsHubPanelOwnedObject(string name)
 {
    if(name == HUB_BG_NAME) return(true);
    if(StringFind(name, "Btn_") >= 0) return(true);
+   //--- Risk Manager EA objects (all start with "RM": panel RM9_, Tag/Scale-in windows, markers...) never need a Hub raise.
+   //--- Without this, minimizing/restoring the RM panel (it deletes + rebuilds ~100 objects) made the Hub raise itself = visible flash.
+   if(StringFind(name, "RM") == 0) return(true);
    return(false);
 }
 
