@@ -165,7 +165,7 @@ void POC_CleanupLegacyObjects()
 
 void SetPOCButtonActive(bool active)
 {
-   ObjectSetInteger(0, BTN_POC, OBJPROP_BGCOLOR, active ? CLR_SUBTOGGLE_ACTIVE : CLR_INACTIVE_GRAY);
+   HubSetBg(BTN_POC, active ? CLR_SUBTOGGLE_ACTIVE : CLR_INACTIVE_GRAY);
 }
 
 void POC_DeleteTrackObjects()
@@ -384,7 +384,7 @@ void SaveWMAPVisible(bool visible)
 
 void SetWMAPButtonColor()
 {
-   ObjectSetInteger(0, BTN_WMAP, OBJPROP_BGCOLOR, wmapVisible ? CLR_SUBTOGGLE_ACTIVE : CLR_INACTIVE_GRAY);
+   HubSetBg(BTN_WMAP, wmapVisible ? CLR_SUBTOGGLE_ACTIVE : CLR_INACTIVE_GRAY);
 }
 
 int WMAP_PriceToPixelY(double price)
@@ -673,7 +673,7 @@ void SaveSOBVisible(bool visible)
 
 void SetSOBButtonColor()
 {
-   ObjectSetInteger(0, BTN_SOB, OBJPROP_BGCOLOR, sobVisible ? CLR_SUBTOGGLE_ACTIVE : CLR_INACTIVE_GRAY);
+   HubSetBg(BTN_SOB, sobVisible ? CLR_SUBTOGGLE_ACTIVE : CLR_INACTIVE_GRAY);
 }
 
 void SOB_Recalculate()
@@ -851,7 +851,7 @@ void SaveNYEVisible(bool visible)
 
 void SetNYEButtonColor()
 {
-   ObjectSetInteger(0, BTN_NYE, OBJPROP_BGCOLOR, nyeVisible ? CLR_SUBTOGGLE_ACTIVE : CLR_INACTIVE_GRAY);
+   HubSetBg(BTN_NYE, nyeVisible ? CLR_SUBTOGGLE_ACTIVE : CLR_INACTIVE_GRAY);
 }
 
 void NYE_Recalculate()
@@ -963,7 +963,7 @@ void SaveMTFCPVisible(bool visible)
 
 void SetMTFCPButtonColor()
 {
-   ObjectSetInteger(0, BTN_MTFCP, OBJPROP_BGCOLOR, mtfcpVisible ? CLR_SUBTOGGLE_ACTIVE : CLR_INACTIVE_GRAY);
+   HubSetBg(BTN_MTFCP, mtfcpVisible ? CLR_SUBTOGGLE_ACTIVE : CLR_INACTIVE_GRAY);
 }
 
 color MTFCP_ContrastSafeColor(color c)

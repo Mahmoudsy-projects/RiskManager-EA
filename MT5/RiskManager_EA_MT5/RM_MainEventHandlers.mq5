@@ -88,10 +88,10 @@ void CycleRR()
 void SetStatus(string msg,color clr)
 {
    ObjectSetString(0,P+"L_STATUS",OBJPROP_TEXT,msg);
-   ObjectSetInteger(0,P+"L_STATUS",OBJPROP_COLOR,clr);
+   ObjectSetInteger(0,P+"L_STATUS",OBJPROP_COLOR,RM_Txt(clr));
    FitBoxFont(P+"L_STATUS", msg);
    ObjectSetString(0,P+"L_STATUS2",OBJPROP_TEXT," "); // [Stage 5c-i empty-label fix, carried forward] "" renders as literal "Label" text on MT5
-   ObjectSetInteger(0,P+"L_STATUS",OBJPROP_YDISTANCE, g_statusBoxTop + ALERT_PAD + SC(12));
+   ObjectSetInteger(0,P+"L_STATUS",OBJPROP_YDISTANCE, g_statusBoxTop + SC(17));
    g_actionMsgUntil = TimeCurrent() + ACTION_MSG_SECONDS;
    ChartRedraw();
 }
@@ -102,15 +102,15 @@ void SetStatus(string msg,color clr)
 void SetStatus2(string msg,color clr)
 {
    ObjectSetString(0,P+"L_STATUS2",OBJPROP_TEXT, (msg=="" ? " " : msg)); // [Stage 5c-i empty-label fix, carried forward]
-   ObjectSetInteger(0,P+"L_STATUS2",OBJPROP_COLOR,clr);
+   ObjectSetInteger(0,P+"L_STATUS2",OBJPROP_COLOR,RM_Txt(clr));
    if(msg != "")
    {
-      ObjectSetInteger(0,P+"L_STATUS",  OBJPROP_YDISTANCE, g_statusBoxTop + ALERT_PAD + SC(12) - SC(6));
-      ObjectSetInteger(0,P+"L_STATUS2", OBJPROP_YDISTANCE, g_statusBoxTop + ALERT_PAD + SC(12) + SC(6));
+      ObjectSetInteger(0,P+"L_STATUS",  OBJPROP_YDISTANCE, g_statusBoxTop + SC(10));
+      ObjectSetInteger(0,P+"L_STATUS2", OBJPROP_YDISTANCE, g_statusBoxTop + SC(24));
    }
    else
    {
-      ObjectSetInteger(0,P+"L_STATUS", OBJPROP_YDISTANCE, g_statusBoxTop + ALERT_PAD + SC(12));
+      ObjectSetInteger(0,P+"L_STATUS", OBJPROP_YDISTANCE, g_statusBoxTop + SC(17));
    }
    ChartRedraw();
 }
@@ -124,6 +124,7 @@ int OnInit()
    // پنجره‌ی Grace Period (CheckDrawdownLimits در RM_DrawdownEngine.mq5) دقیقاً از همین لحظه
    // شمرده می‌شه.
    g_eaStartupTime = TimeCurrent();
+   RM_ThemeInit((int)DashTheme);   // v75.17 (MT4 v110): theme colour table must be initialised first
    ApplyLayoutScale();
    RM_LoadSharedSettings();      // v75.15 (MT4 v102/v104): shared account-wide settings, before any consumer
    ApplyRiskCeilings();
@@ -798,6 +799,19 @@ void OnChartEvent(const int id, const long &lp, const double &dp, const string &
          return;
       }
 
+      // v75.17 (MT4 v110 P2): Reports tab
+      if(sp == P+"BTN_DASH_REPORTS" && (g_dashboardMode != DASH_REPORTS || g_minimized))
+      {
+         g_dashboardMode = DASH_REPORTS;
+         g_minimized = false;
+         SaveDashboardModeState();
+         ObjectsDeleteAll(0, P);
+         BuildPanel();
+         SetStatus("Dashboard: Reports", clrLimeGreen);
+         ChartRedraw();
+         return;
+      }
+
       // v75.13 (MT4 v90): انتخابگر Scale-in باز بود و تریدر مستقیم MARKET/PENDING زد -> انتخابگر بسته و Scale-in خاموش (ورود عادی)
       if((sp==P+"BTN_MARKET" || sp==P+"BTN_PENDING") && g_scaleInPickerOpen)
       { CloseScaleInPicker(); UpdateScaleInButton(); }
@@ -869,25 +883,7 @@ void OnChartEvent(const int id, const long &lp, const double &dp, const string &
          SetStatus(RiskStepName(g_riskStep)+" Risk selected", (g_riskStep==0) ? C'170,30,30' : C'220,90,90');
       }
 
-      if(sp == P+"BTN_PERF")
-      {
-         g_perfDrawerOpen = !g_perfDrawerOpen;
-         ObjectsDeleteAll(0, P);
-         BuildPanel();
-         SetStatus(g_perfDrawerOpen ? "Performance: expanded" : "Performance: collapsed", C'150,160,180');
-         ChartRedraw();
-         return;
-      }
-
-      if(sp == P+"BTN_REPORTS")
-      {
-         g_reportsDrawerOpen = !g_reportsDrawerOpen;
-         ObjectsDeleteAll(0, P);
-         BuildPanel();
-         SetStatus(g_reportsDrawerOpen ? "Trading Reports: expanded" : "Trading Reports: collapsed", C'150,160,180');
-         ChartRedraw();
-         return;
-      }
+      // v75.17 (MT4 v110 P2): BTN_PERF / BTN_REPORTS are static headers now (no collapse) - handlers removed.
 
       if(sp == P+"BTN_REP_DAILY" && g_reportsPeriod != 0)
       {

@@ -22,7 +22,7 @@
 #property description "Drawn shapes/labels are independent, selectable chart"
 #property description "objects that persist even if this indicator is removed -"
 #property description "delete them manually if needed."
-#property version   "1.16"   // v1.16: تم Custom (جایگزین Original؛ Custom/S/R، ذخیره‌ی سراسری). v1.15: حذف Print تشخیصی [HUB-PATHGROUP]. v1.14: ابزارهای Path ۲ و Line ۲ + ترتیب شماره‌ی تم‌ها (v1.13: تم‌های ۸-۱۰)
+#property version   "1.17"   // v1.16: تم Custom (جایگزین Original؛ Custom/S/R، ذخیره‌ی سراسری). v1.15: حذف Print تشخیصی [HUB-PATHGROUP]. v1.14: ابزارهای Path ۲ و Line ۲ + ترتیب شماره‌ی تم‌ها (v1.13: تم‌های ۸-۱۰)
 #property strict
 #property indicator_chart_window
 #property indicator_buffers 7
@@ -347,6 +347,7 @@ void OnDeinit(const int reason)
    ObjectDelete(0, BTN_THEME_ORIG);
    ObjectDelete(0, BTN_THEME_CUSTOM); ObjectDelete(0, BTN_THEME_CSAVE); ObjectDelete(0, BTN_THEME_CRESET);   // v1.16
    ObjectDelete(0, HUB_BG_NAME);
+   HubDeleteShadows();   // v1.17
 
    //--- ماژول ۱ - POC: فقط دکمه و کرسور تشخیصی پاک می‌شن؛ خطوط POC/LVN/Exhaustion
    //--- عمداً دست‌نخورده می‌مونن (مثل قبل، برای بقا روی تغییر تایم‌فریم)
@@ -922,7 +923,7 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
          {
             DisarmLabel();
             armedLabel = LabelList[i];
-            ObjectSetInteger(0, sparam, OBJPROP_BGCOLOR, CLR_SUBTOGGLE_ACTIVE);
+            HubSetBg(sparam, CLR_SUBTOGGLE_ACTIVE);
          }
          ChartRedraw();
          return;

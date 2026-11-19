@@ -24,7 +24,14 @@ int PW, TH, MX, GP;
 
 // v28 (Change 3): true single merged background behind Status + Open Risk + Floating (3 lines,
 // one shared RectC instead of v27's three adjacent BG_STATUS/BG_OPEN/BG_FDD boxes)
-int ALERT_H;    // v28 revision 2: 70->56 - still had room to condense per feedback
+int ALERT_H;
+int STATBOX_H, INFOBOX_H;   // v110 P2
+// v110 P4h: Utility در تم Mono باکس آمار ۳ ستونه (RISK / OPEN / FLOAT) دارد - مطابق ماکاپ V5/V6
+bool RM_UtilCompact() { return (g_themeId==RM_THEME_MONO && g_dashboardMode==DASH_UTILITY); }
+int  RM_InfoBoxH()    { return RM_UtilCompact() ? SC(40) : INFOBOX_H; }
+int  RM_AlertTotalH() { return STATBOX_H + GP + RM_InfoBoxH(); }
+string g_statusSub = "";   // v110 P4d: خط دوم اعلان کولداون
+int g_cdSegM = 0, g_cdSegB = 0;   // v110 P3: تعداد پله‌های کولداون    // v28 revision 2: 70->56 - still had room to condense per feedback
 int STATUS_H;   // status sub-area - v28 revision 2: 30->24
 int SUBROW_H;   // Open Risk / Floating sub-rows - v28 revision 2: 20->16
 
@@ -97,7 +104,8 @@ void ApplyLayoutScale()
 {
    g_layoutScale = (double)LayoutScale / 100.0;
 
-   PW = SC(195); TH = SC(30); MX = SC(5); GP = SC(5);
+   // v110 P2: 220px wide; titlebar = title row (30) + tab row (28)
+   PW = SC(220); TH = SC(62); MX = (DashTheme==THEME_MONO) ? SC(10) : SC(5); GP = SC(5);
 
    STATUS_H = SC(24);
    SUBROW_H = SC(16);
@@ -106,14 +114,16 @@ void ApplyLayoutScale()
    // Status/Open-Risk, equal gap between Open-Risk/Floating, and equal bottom margin (see
    // BuildPanel() for the actual line placement using this).
    ALERT_PAD = SC(3);
-   ALERT_H  = STATUS_H + SUBROW_H*3 + ALERT_PAD*5;  // v99 (FEAT-045): یک ردیف جدید L_RISKINFO (درصد ریسک + حالت) بین Status و Open Risk
+   STATBOX_H = SC(34);   // v110 P2: notification box 34px, two lines (L_STATUS + L_STATUS2)
+   INFOBOX_H = SUBROW_H*3 + ALERT_PAD*4;
+   ALERT_H  = STATBOX_H + GP + INFOBOX_H;  // v99 (FEAT-045): یک ردیف جدید L_RISKINFO (درصد ریسک + حالت) بین Status و Open Risk
 
    RISKRR_H = SC(30);
-   SCALEIN_H = SC(18);   // v90 (FEAT-044)
+   SCALEIN_H = SC(28);   // v90 (FEAT-044)
    MP_H     = SC(56);
 
-   ACT_H = SC(28);
-   CD_H  = SC(26);
+   ACT_H = SC(30);
+   CD_H  = SC(54);   // v110 P2: prominent cooldown block
 
    PERF_HDR_H    = SC(26);
    PERF_ROW_H    = SC(22);
@@ -155,7 +165,7 @@ void CheckPanelIntegrity()
 void StartButtonFlash(string objName, color flashColor, uint &deadline)
 {
    if(ObjectFind(0, objName) < 0) return;  // Minimized یا COMPACT/FULL دیگه‌ای که این دکمه توش نیست
-   ObjectSetInteger(0, objName, OBJPROP_BGCOLOR, flashColor);
+   BtnBg(objName, flashColor);
    deadline = GetTickCount() + BTN_FLASH_MS;
    ChartRedraw();
 }
@@ -170,26 +180,26 @@ void CheckButtonFlashExpiry()
    uint now = GetTickCount();
    if(g_beFlashEnd != 0 && (int)(now - g_beFlashEnd) >= 0)
    {
-      if(ObjectFind(0,P+"BTN_BE")>=0) ObjectSetInteger(0,P+"BTN_BE",OBJPROP_BGCOLOR,CLR_BTN_DEFAULT);
+      if(ObjectFind(0,P+"BTN_BE")>=0) BtnBg(P+"BTN_BE", CLR_BTN_DEFAULT);
       g_beFlashEnd = 0;
       ChartRedraw();
    }
    if(g_halfFlashEnd != 0 && (int)(now - g_halfFlashEnd) >= 0)
    {
-      if(ObjectFind(0,P+"BTN_HALF")>=0) ObjectSetInteger(0,P+"BTN_HALF",OBJPROP_BGCOLOR,CLR_BTN_DEFAULT);
+      if(ObjectFind(0,P+"BTN_HALF")>=0) BtnBg(P+"BTN_HALF", CLR_BTN_DEFAULT);
       g_halfFlashEnd = 0;
       ChartRedraw();
    }
    if(g_fullFlashEnd != 0 && (int)(now - g_fullFlashEnd) >= 0)
    {
-      if(ObjectFind(0,P+"BTN_FULL")>=0) ObjectSetInteger(0,P+"BTN_FULL",OBJPROP_BGCOLOR,CLR_BTN_DEFAULT);
+      if(ObjectFind(0,P+"BTN_FULL")>=0) BtnBg(P+"BTN_FULL", CLR_BTN_DEFAULT);
       g_fullFlashEnd = 0;
       ChartRedraw();
    }
    // v60 (EXPORT CSV Feedback): همون الگوی سه بلوک بالا - بعد از ۵ ثانیه به CLR_BTN_DEFAULT برمی‌گرده
    if(g_exportFlashEnd != 0 && (int)(now - g_exportFlashEnd) >= 0)
    {
-      if(ObjectFind(0,P+"BTN_EXPORTCSV")>=0) ObjectSetInteger(0,P+"BTN_EXPORTCSV",OBJPROP_BGCOLOR,CLR_BTN_DEFAULT);
+      if(ObjectFind(0,P+"BTN_EXPORTCSV")>=0) BtnBg(P+"BTN_EXPORTCSV", CLR_BTN_DEFAULT);
       g_exportFlashEnd = 0;
       ChartRedraw();
    }
@@ -200,7 +210,7 @@ void CheckButtonFlashExpiry()
    if((g_fiboArmedRR || g_fiboArmedMeasure) && g_fiboArmDeadline != 0 && (int)(now - g_fiboArmDeadline) >= 0)
    {
       CancelFiboArm();
-      SetStatus("Cancelled - timed out", clrOrange);
+      SetStatus("Cancelled - timed out", TH_ORANGE);
       ChartRedraw();
    }
 }
@@ -237,10 +247,11 @@ void UpdateFloatingDisplay()
    else                                                     c = CLR_NEUTRAL;
    string fddTxt = "Floating: "+DoubleToStr(floatPct,2)+"% / "+DoubleToStr(MathAbs(InpMaxFloatingDDPercent),2)+"%";   // v102: مثل Open Risk (فعلی / سقف)
    SetLbl(P+"L_FDD", fddTxt, c);
+   if(ObjectFind(0,P+"U_FDD_V")>=0) SetLbl(P+"U_FDD_V", DoubleToStr(floatPct,2)+"%", c);   // v110 P4h
    // v42 (Punch List, Part 2): FitBoxFontBig()'s size-10 default sat flush against the row below
    // (the Status box - STATUS_H+SUBROW_H+SUBROW_H - has zero spare margin) - one point smaller,
    // same length-based shrink thresholds otherwise, paired with the BuildPanel() y-nudge above.
-   int fddSz = 9;
+   int fddSz = 8;   // v110 P4h: هم‌اندازه‌ی دو خط بالایی (قبلاً ۹)
    int fddLen = StringLen(fddTxt);
    if(fddLen > 36)      fddSz = 6;
    else if(fddLen > 25) fddSz = 8;
@@ -294,7 +305,7 @@ void UpdateCooldownDisplay()
    // Market/Behavior Cooldown and Weekly/Monthly DD boxes only exist on the Trading dashboard
    // (renamed v31 from FULL). Enforcement (locks/counters) keeps running in the background
    // regardless of mode - only the on-screen display is skipped here.
-   if(g_dashboardMode==DASH_TRADING)
+   if(g_dashboardMode==DASH_TRADING || g_dashboardMode==DASH_REPORTS)
    {
       string mktTxt="", behTxt="";
       color  mktClr=CLR_NEUTRAL, behClr=CLR_NEUTRAL;
@@ -309,9 +320,9 @@ void UpdateCooldownDisplay()
       {
          int rem = (int)(g_mktCooldownEnd - now);
          int hh=rem/3600, mm=(rem%3600)/60, ss=rem%60;
-         mktTxt = "Mkt CD: "+IntegerToString(hh)+":"+StringFormat("%02d",mm)+":"+StringFormat("%02d",ss);
+         mktTxt = IntegerToString(hh)+":"+StringFormat("%02d",mm)+":"+StringFormat("%02d",ss);
          mktClr = CLR_BREACHED;
-         mktBg  = C'80,20,20';
+         mktBg  = TH_CD_BG_ALERT;
       }
       else
       {
@@ -320,9 +331,9 @@ void UpdateCooldownDisplay()
          // keep the plain whole-number look (e.g. "2/3") to match the pre-v19 display.
          bool isFractional = (MathAbs(g_mktStopCount - MathRound(g_mktStopCount)) > 0.001);
          string mktCountTxt = isFractional ? DoubleToStr(g_mktStopCount,1) : IntegerToString((int)MathRound(g_mktStopCount));  // v99 (FEAT-045): حداکثر یک رقم اعشار (سه رقم از کادر بیرون می‌زد)  // v84 (FEAT-038 Addendum): با گام 0.25/0.125 یک رقم اعشار گمراه‌کننده بود (0.25 -> "0.3")
-         mktTxt = "Mkt CD: "+mktCountTxt+"/"+IntegerToString(MarketCDCount);
-         if(g_mktStopCount >= MarketCDCount*WARN_RATIO) { mktClr = CLR_APPROACHING; mktBg = C'55,42,25'; }
-         else                                           { mktClr = CLR_NEUTRAL;     mktBg = C'38,38,42'; }
+         mktTxt = mktCountTxt+"/"+IntegerToString(MarketCDCount);
+         if(g_mktStopCount >= MarketCDCount*WARN_RATIO) { mktClr = CLR_APPROACHING; mktBg = TH_CD_BG_WARN; }
+         else                                           { mktClr = CLR_NEUTRAL;     mktBg = TH_CD_BG; }
       }
       ObjectSetInteger(0,P+"BG_MKT",OBJPROP_BGCOLOR,mktBg);
 
@@ -333,31 +344,41 @@ void UpdateCooldownDisplay()
       {
          int rem = (int)(g_behCooldownEnd - now);
          int hh=rem/3600, mm=(rem%3600)/60, ss=rem%60;
-         behTxt = "Beh CD: "+IntegerToString(hh)+":"
+         behTxt = IntegerToString(hh)+":"
                   +StringFormat("%02d",mm)+":"+StringFormat("%02d",ss);
          behClr = CLR_BREACHED;
-         behBg  = C'80,20,20';
+         behBg  = TH_CD_BG_ALERT;
       }
       else
       {
-         behTxt = "Beh CD: "+IntegerToString(g_behCount)+"/"+IntegerToString(BehaviorCDCount);
-         if(g_behCount >= BehaviorCDCount*WARN_RATIO) { behClr = CLR_APPROACHING; behBg = C'55,42,25'; }
-         else                                         { behClr = CLR_NEUTRAL;     behBg = C'38,38,42'; }
+         behTxt = IntegerToString(g_behCount)+"/"+IntegerToString(BehaviorCDCount);
+         if(g_behCount >= BehaviorCDCount*WARN_RATIO) { behClr = CLR_APPROACHING; behBg = TH_CD_BG_WARN; }
+         else                                         { behClr = CLR_NEUTRAL;     behBg = TH_CD_BG; }
       }
       ObjectSetInteger(0,P+"BG_BEH",OBJPROP_BGCOLOR,behBg);
+      // v110 P3: رنگ پله‌ها (پر = شمارنده؛ در قفل همه پر)
+      {
+         bool mLock = (g_mktCooldownEnd>0 && now<g_mktCooldownEnd), bLock = (g_behCooldownEnd>0 && now<g_behCooldownEnd);
+         for(int s1=0; s1<g_cdSegM; s1++)
+            if(ObjectFind(0,P+"SEG_M"+IntegerToString(s1))>=0)
+               ObjectSetInteger(0,P+"SEG_M"+IntegerToString(s1),OBJPROP_BGCOLOR, (mLock || g_mktStopCount > s1+0.25) ? TH_RED : TH_BTN);
+         for(int s2=0; s2<g_cdSegB; s2++)
+            if(ObjectFind(0,P+"SEG_B"+IntegerToString(s2))>=0)
+               ObjectSetInteger(0,P+"SEG_B"+IntegerToString(s2),OBJPROP_BGCOLOR, (bLock || g_behCount > s2) ? TH_RED : TH_BTN);
+      }
 
       SetLbl(P+"L_MKTCD", mktTxt, mktClr);
       SetLbl(P+"L_BEHCD", behTxt, behClr);
       // v102: Market CD هم مثل Behavior CD (BUG-032) نیمه‌عرض است؛ در حالت قفل ("Mkt CD: 1:59:30") با FitBoxFontBig از کادر بیرون می‌زد.
       // حالا width-aware (همان محاسبه‌ی عرض cdw1 که BuildPanel با آن ساخته).
       int mktBoxW = (CW-GP)/2;
-      FitBoxFontHalf(P+"L_MKTCD", mktTxt, mktBoxW);
+      FitBoxFontHalf(P+"L_MKTCD", mktTxt, mktBoxW, 14);   // v110 P2b: big counter
       // v33 (BUG-032): L_BEHCD switched to the width-aware FitBoxFontHalf() - cdw2 recomputed
       // here from the same CW/GP the box was actually built with (BuildPanel()'s cdw1/cdw2 are
       // local to that function, so this mirrors that same math rather than introducing a new
       // stored global just to carry one width across functions).
       int behBoxW = CW - GP - (CW-GP)/2;
-      FitBoxFontHalf(P+"L_BEHCD", behTxt, behBoxW); // v9->v33: was FitBoxFontBig(), see BUG-032 above
+      FitBoxFontHalf(P+"L_BEHCD", behTxt, behBoxW, 14); // v9->v33: was FitBoxFontBig(), see BUG-032 above
 
 
       // v27 (Change 2): Weekly/Monthly P/L rows only exist when the "📊 Performance" box is
@@ -460,39 +481,60 @@ void UpdateSystemStatus()
    if(TimeCurrent() < g_actionMsgUntil) return;
 
    datetime now = TimeCurrent();
-   string txt; color clr;
+   string txt; color clr; string sub = "";
 
    if(g_monthlyLockEnd>0 && now<g_monthlyLockEnd)
-   { txt="MONTHLY DRAWDOWN LOCK"; clr=clrRed; }
+   { txt="MONTHLY DRAWDOWN LOCK"; clr=TH_RED; }
    else if(g_weeklyLockEnd>0 && now<g_weeklyLockEnd)
-   { txt="WEEKLY DRAWDOWN LOCK"; clr=clrRed; }
+   { txt="WEEKLY DRAWDOWN LOCK"; clr=TH_RED; }
    // v51 (Parking Lot #1): الان قفل Daily هم persisted شد (g_dailyLockEnd) - نمایش وضعیت از روی
    // خودِ قفل می‌خونه، نه فقط مقایسه‌ی زنده‌ی EnableDailyDD/GetDailyRisk، وگرنه بعد از خاموش‌کردن
    // EnableDailyDD وسط قفل، این خط اشتباهاً READY نشون می‌داد در حالی که IsTradingAllowed() هنوز
    // بلاک می‌کنه. مقایسه‌ی زنده‌ی قبلی به‌عنوان fallback نگه داشته شده تا لحظه‌ی رسیدن به آستانه
    // (قبل از این‌که CheckDrawdownLimits() قفل رو واقعاً بسازه) هم روی داشبورد دیده بشه.
    else if(g_dailyLockEnd>0 && now<g_dailyLockEnd)
-   { txt="DAILY DRAWDOWN LOCK"; clr=clrRed; }
+   { txt="DAILY DRAWDOWN LOCK"; clr=TH_RED; }
    else if(EnableDailyDD && GetDailyRisk() >= g_effMaxDailyRisk)
-   { txt="DAILY DRAWDOWN LIMIT REACHED"; clr=clrRed; }
+   { txt="DAILY DRAWDOWN LIMIT REACHED"; clr=TH_RED; }
    else if(g_mktCooldownEnd>0 && now<g_mktCooldownEnd)
-   { txt="MARKET COOLDOWN ACTIVE"; clr=clrRed; }
+   { txt="MARKET COOLDOWN ACTIVE"; clr=TH_RED; sub="next entry allowed in "+RM_FmtRem((int)(g_mktCooldownEnd-now)); }
    else if(g_behCooldownEnd>0 && now<g_behCooldownEnd)
-   { txt="BEHAVIOR COOLDOWN ACTIVE"; clr=C'255,165,0'; }
+   { txt="BEHAVIOR COOLDOWN ACTIVE"; clr=TH_BEH_TXT; sub="next entry allowed in "+RM_FmtRem((int)(g_behCooldownEnd-now)); }
    else if(g_trailingButtonOn)
-   { txt="TRAILING ON"; clr=C'0,180,180'; }
+   { txt="TRAILING ON"; clr=TH_TRAIL_TXT; }
    else if(IsBreakEvenActive())
-   { txt="BREAK EVEN ACTIVE"; clr=clrAqua; }
+   { txt="BREAK EVEN ACTIVE"; clr=TH_AQUA; }
    else
-   { txt="READY TO TRADE"; clr=clrLimeGreen; }
+   { txt="READY TO TRADE"; clr=TH_OK; }
 
+   if(g_themeId!=RM_THEME_CLASSIC)   // v110 P3: زمینه‌ی قرمز کم‌رنگ فقط برای قفل/محدودیت/کولداون
+   {
+      bool alertSt = (StringFind(txt,"LOCK")>=0 || StringFind(txt,"LIMIT")>=0 || StringFind(txt,"COOLDOWN")>=0);
+      ObjectSetInteger(0,P+"BG_ALERT",OBJPROP_BGCOLOR, alertSt ? TH_CD_BG_ALERT : TH_ALERT_BG);
+   }
    ObjectSetString(0,P+"L_STATUS",OBJPROP_TEXT,txt);
-   ObjectSetInteger(0,P+"L_STATUS",OBJPROP_COLOR,clr);
+   ObjectSetInteger(0,P+"L_STATUS",OBJPROP_COLOR,RM_Txt(clr));
    FitBoxFont(P+"L_STATUS", txt); // v8 (BUG-014): سایز فونت رو با طول متن تطبیق بده تا از کادر بیرون نزنه
    // v43 (Item 4): +ALERT_PAD, same reasoning as SetStatus()/SetStatus2() - row1's slot now starts
    // ALERT_PAD below the box top instead of flush with it.
-   ObjectSetInteger(0,P+"L_STATUS",OBJPROP_YDISTANCE, g_statusBoxTop + ALERT_PAD + SC(14));
+   ObjectSetInteger(0,P+"L_STATUS",OBJPROP_YDISTANCE, g_statusBoxTop + SC(17));
+   g_statusSub = sub;
+   if(sub != "")   // v110 P4d: اعلان دو خطی کولداون (خط دوم: زمان ورود بعدی)
+   {
+      ObjectSetString (0,P+"L_STATUS2",OBJPROP_TEXT,  sub);
+      ObjectSetInteger(0,P+"L_STATUS2",OBJPROP_COLOR, RM_Txt(clr));
+      ObjectSetInteger(0,P+"L_STATUS", OBJPROP_YDISTANCE, g_statusBoxTop + SC(10));
+      ObjectSetInteger(0,P+"L_STATUS2",OBJPROP_YDISTANCE, g_statusBoxTop + SC(24));
+   }
    ChartRedraw();
+}
+
+string RM_FmtRem(int rem)
+{
+   if(rem < 0) rem = 0;
+   int hh = rem/3600, mm = (rem%3600)/60, ss = rem%60;
+   if(hh > 0) return IntegerToString(hh)+":"+StringFormat("%02d",mm)+":"+StringFormat("%02d",ss);
+   return StringFormat("%02d",mm)+":"+StringFormat("%02d",ss);
 }
 
 // v59 (Item 4 - یادآوری معاملات تگ‌نخورده): L_STATUS2 از v9.4 به بعد استفاده نمی‌شد ("دیگه از v8
@@ -508,6 +550,7 @@ void UpdateUntaggedReminder()
    // برمی‌گردونه - تا اون لحظه تموم نشه این‌جا دست نمی‌زنیم، وگرنه هر کلیک روی هر دکمه‌ای
    // لحظه‌ای این یادآوری رو با چیدمان اشتباه پس می‌داد.
    if(TimeCurrent() < g_actionMsgUntil) return;
+   if(g_statusSub != "") return;   // v110 P4d: خط دوم الان زمان کولداون است
 
    int untagged = CountUntaggedToday();  // RM_Tools.mqh
 
@@ -515,15 +558,15 @@ void UpdateUntaggedReminder()
    {
       string msg = IntegerToString(untagged) + (untagged==1 ? " trade untagged" : " trades untagged");
       ObjectSetString (0,P+"L_STATUS2",OBJPROP_TEXT,  msg);
-      ObjectSetInteger(0,P+"L_STATUS2",OBJPROP_COLOR, clrRed);
+      ObjectSetInteger(0,P+"L_STATUS2",OBJPROP_COLOR, TH_RED);
       // v2/v43 چیدمان دوخطی: خط اول کمی بالاتر، خط دوم پایین‌تر - همون افست‌های SetStatus2()
-      ObjectSetInteger(0,P+"L_STATUS",  OBJPROP_YDISTANCE, g_statusBoxTop + ALERT_PAD + SC(12) - SC(6));
-      ObjectSetInteger(0,P+"L_STATUS2", OBJPROP_YDISTANCE, g_statusBoxTop + ALERT_PAD + SC(12) + SC(6));
+      ObjectSetInteger(0,P+"L_STATUS",  OBJPROP_YDISTANCE, g_statusBoxTop + SC(10));
+      ObjectSetInteger(0,P+"L_STATUS2", OBJPROP_YDISTANCE, g_statusBoxTop + SC(24));
    }
    else
    {
       ObjectSetString(0,P+"L_STATUS2",OBJPROP_TEXT,"");
-      ObjectSetInteger(0,P+"L_STATUS", OBJPROP_YDISTANCE, g_statusBoxTop + ALERT_PAD + SC(14));
+      ObjectSetInteger(0,P+"L_STATUS", OBJPROP_YDISTANCE, g_statusBoxTop + SC(17));
    }
    ChartRedraw();
 }
@@ -544,7 +587,7 @@ void GreyOutPanel(string exceptName)
    names[11]="BG_MKT";        names[12]="BG_BEH";
    names[13]="BTN_PERF";      names[14]="BG_PERF";       names[15]="BTN_FULL";
 
-   color grey = C'55,55,62';
+   color grey = TH_BTN_DARK;
    for(int i=0;i<ArraySize(names);i++)
    {
       if(names[i]==exceptName) continue;
@@ -577,21 +620,23 @@ int ComputeBodyH()
    // The old COMPACT 4-button action row and its reserved Close-submenu space are gone entirely -
    // Full Close (and therefore its submenu) no longer exists outside Trading.
    int h = GP;
-   h += ALERT_H+GP;
+   h += RM_AlertTotalH()+GP;
    if(g_dashboardMode==DASH_TRADING)
    {
       h += RISKRR_H+GP;
       h += SCALEIN_H+GP;   // v90 (FEAT-044): Scale-in row (must mirror BuildPanel)
+      h += SC(14);     // v110 P2b: ENTRY caption
       h += MP_H+GP;
+      h += SC(14);     // v110 P2b: MANAGE caption
       h += ACT_H+GP;   // BE / Half Close row
       h += ACT_H+GP;   // Full Close / Trailing row
+      if(g_themeId==RM_THEME_MONO && g_fullCloseMenuOpen) h += 2*(CLOSE_GRID_ROW_H + CLOSE_GRID_GAP);   // v110 P4 (باید با BuildPanel یکی باشد)
+      h += SC(14);     // v110 P2: BEHAVIOR CONTROL caption
       h += CD_H+GP;    // Mkt CD / Beh CD row
-      h += PERF_HDR_H;
-      h += g_perfDrawerOpen ? (3 + PERF_ROW_H*3 + PERF_BOX_PAD*2 + GP) : GP;
    }
-   else // DASH_UTILITY
+   else if(g_dashboardMode==DASH_UTILITY)
    {
-      h += TOOLS_HDR_H;
+      h += (g_themeId==RM_THEME_MONO) ? (SC(14)*4) : TOOLS_HDR_H;   // v110 P4h: Mono = ۴ عنوان بخش (LEVELS/DRAWING/DATA/SESSION)
       // v43 (Item 3): Tools header is now a static separator (no expand/collapse) - its rows are
       // always visible, so this contribution is unconditional now (previously gated on
       // g_toolsDrawerOpen). Same "3 + row + GP" shape as before, per row.
@@ -602,14 +647,16 @@ int ComputeBodyH()
       // (REPORTS_ROW_COUNT rows + top/bottom padding), then the trailing GP. Must mirror the exact
       // shape BuildPanel() draws below, or clicks near the bottom of the panel will misregister
       // (see IsOnPanel(), which delegates to this function).
-      h += REPORTS_HDR_H;
-      h += g_reportsDrawerOpen
-           ? (3 + REPORTS_TAB_H+GP + REPORTS_ROW_COUNT*REPORTS_ROW_H + REPORTS_BOX_PAD*2 + GP)
-           : GP;
-
+      // v110 P2: Reports/Performance moved to the Reports tab (below)
+   }
+   else // DASH_REPORTS
+   {
+      h += PERF_HDR_H + 3 + PERF_ROW_H*3 + PERF_BOX_PAD*2 + GP;
+      h += REPORTS_HDR_H + 3 + REPORTS_TAB_H+GP + REPORTS_ROW_COUNT*REPORTS_ROW_H + REPORTS_BOX_PAD*2 + GP;
       // v43 (Item 2): Risk Lab / Journal / AI Coach placeholder rows removed entirely from the
       // layout (see BuildPanel()) - no height contribution from them anymore.
    }
+   h += (MX - GP);   // v110 P4c: حاشیه‌ی پایین = حاشیه‌ی چپ/راست (MX) در هر سه تب
    return h;
 }
 
@@ -633,6 +680,9 @@ void BuildPanel()
 
    // همیشه از corner چپ استفاده می‌کنیم
    // اگه PanelRight=true، X رو از عرض چارت حساب می‌کنیم
+   // v110 P2c: geometry depends on minimized state - collapsed = one 300px row (min btn + title + 3 tabs inline), expanded = 220px with tab row under the title
+   PW = g_minimized ? SC(300) : SC(220);
+   TH = g_minimized ? SC(34)  : SC(62);
    int corner = CORNER_LEFT_UPPER;
    int chartW  = (int)ChartGetInteger(0, CHART_WIDTH_IN_PIXELS);
    int x = PanelRight ? chartW - PW - PanelX : PanelX;
@@ -640,30 +690,68 @@ void BuildPanel()
 
    // Titlebar - v28 (Change 1): taller (24->30) with bigger title font; FULL/COMPACT toggle still
    // inline beside the title (kept from v27 Change 3), just repositioned/enlarged for the wider panel.
-   RectC(P+"TITLEBAR", x, y, PW, TH, C'35,38,52', corner);
-   BtnC(P+"BTN_MIN", x+SC(5), y+SC(6), SC(18), SC(18), g_minimized?"+":"-", C'60,64,80', corner, 8);
-   // v29 (Part 2): "RISK MANAGER" was getting clipped against the FULL/COMPACT toggle in the 195px
-   // titlebar - title moved left (closer to BTN_MIN) and dropped one font size, and FULL/COMPACT
-   // tightened/shifted slightly to free up room, so the full title is legible with no overlap.
-   // v31: FULL/COMPACT renamed to Trading/Utility (Change 1) - both labels are now 7 characters
-   // (same as COMPACT was), so Trading's button widens to match Utility's instead of reusing FULL's
-   // narrower 40px slot; total footprint/right margin is otherwise unchanged.
-   // v32: every offset/size below is now SC()-wrapped so the whole title bar (button, title text,
-   // and the two mode-toggle buttons) shrinks/grows in lockstep with PW instead of PW scaling while
-   // these stayed fixed (which would have pushed BTN_DASH_UTILITY past the panel's right edge at
-   // smaller scales, or left an oversized gap at 100%).
-   LblC(P+"TITLE", x+SC(24), y+SC(10), "RISK MANAGER", clrWhite, 7, true, corner);
-   BtnC(P+"BTN_DASH_TRADING", x+PW-SC(94), y+SC(6), SC(44), SC(18), "Trading",
-        (g_dashboardMode==DASH_TRADING) ? C'40,130,60' : C'60,64,80', corner, 6);
-   BtnC(P+"BTN_DASH_UTILITY", x+PW-SC(48), y+SC(6), SC(44), SC(18), "Utility",
-        (g_dashboardMode==DASH_UTILITY) ? C'40,130,60' : C'60,64,80', corner, 6);
+   RectC(P+"TITLEBAR", x, y, PW, TH, TH_TITLEBAR, corner);
+   bool monoTabs = (g_themeId==RM_THEME_MONO);
+   int tabsW, tbY, tbH, tbX, tbW1, tbW3;
+   int tabGap = monoTabs ? 0 : SC(3);
+   if(g_minimized)
+   {
+      BtnC(P+"BTN_MIN", x+SC(5), y+SC(7), SC(20), SC(20), "+", TH_TAB, corner, 9);
+      LblC(P+"TITLE", x+SC(34), y+SC(11), "RISK MANAGER", TH_WHITE, 8, true, corner);
+      tbW1 = SC(52); tbW3 = SC(52);
+      tabsW = tabGap*2 + tbW1*2 + tbW3;
+      tbX = x+PW-SC(4)-tabsW; tbY = y+SC(4); tbH = SC(26);
+      if(monoTabs) { tbX -= SC(2); tbY += SC(2); tbH -= SC(4); }   // داخل قاب
+   }
+   else
+   {
+      BtnC(P+"BTN_MIN", x+SC(5), y+SC(6), SC(20), SC(20), "-", TH_TAB, corner, 9);
+      LblCC(P+"TITLE", x+SC(28), y, PW-SC(28)-SC(8), SC(30), "RISK MANAGER", TH_WHITE, 9, true, corner, 0);
+      if(monoTabs)
+      {
+         // v110 P4i: قاب سه‌تب مطابق ماکاپ - هم‌عرض ناحیه‌ی محتوا (MX از دو طرف)، تب‌ها داخل قاب و تخت
+         int stW = PW - 2*MX;
+         tbX = x + MX + SC(2); tbY = y + SC(32); tbH = SC(24);
+         tbW1 = (stW - SC(4))/3; tbW3 = stW - SC(4) - 2*tbW1;
+      }
+      else
+      {
+         tbX = x+SC(4); tbY = y+SC(30); tbH = SC(28);
+         tbW1 = (PW-SC(8)-2*SC(3))/3; tbW3 = PW-SC(8)-2*SC(3)-2*tbW1;
+      }
+   }
+   if(monoTabs)   // قاب دور سه تب
+   {
+      RectC(P+"TABSTRIP", tbX-SC(2), tbY-SC(2), tbW1*2+tbW3+SC(4), tbH+SC(4), TH_BTN_DARK, corner);
+      ObjectSetInteger(0,P+"TABSTRIP",OBJPROP_BORDER_COLOR, C'176,176,176');
+   }
+   BtnC(P+"BTN_DASH_TRADING", tbX,                    tbY, tbW1, tbH, "Trading",
+        (g_dashboardMode==DASH_TRADING) ? TH_TAB_ACTIVE : TH_TAB, corner, g_minimized ? 7 : 8);
+   BtnC(P+"BTN_DASH_UTILITY", tbX+tbW1+tabGap,         tbY, tbW1, tbH, "Utility",
+        (g_dashboardMode==DASH_UTILITY) ? TH_TAB_ACTIVE : TH_TAB, corner, g_minimized ? 7 : 8);
+   BtnC(P+"BTN_DASH_REPORTS", tbX+2*tbW1+2*tabGap,     tbY, tbW3, tbH, "Reports",
+        (g_dashboardMode==DASH_REPORTS) ? TH_TAB_ACTIVE : TH_TAB, corner, g_minimized ? 7 : 8);
+   if(monoTabs)   // تب‌ها تخت‌اند (بدون برجستگی)؛ غیرفعال = هم‌رنگ قاب با متن خاکستری
+   {
+      string tbN[3]; tbN[0]=P+"BTN_DASH_TRADING"; tbN[1]=P+"BTN_DASH_UTILITY"; tbN[2]=P+"BTN_DASH_REPORTS";
+      EDashboardMode tbM[3]; tbM[0]=DASH_TRADING; tbM[1]=DASH_UTILITY; tbM[2]=DASH_REPORTS;
+      for(int tk=0; tk<3; tk++)
+      {
+         bool act = (g_dashboardMode==tbM[tk]);
+         color flatC = act ? TH_TAB_ACTIVE : TH_BTN_DARK;
+         ObjectSetInteger(0,tbN[tk]+"_SH",OBJPROP_BGCOLOR,flatC);
+         ObjectSetInteger(0,tbN[tk],OBJPROP_BGCOLOR,flatC);
+         ObjectSetInteger(0,tbN[tk],OBJPROP_BORDER_COLOR,flatC);
+         ObjectSetInteger(0,tbN[tk],OBJPROP_COLOR, act ? (color)clrWhite : TH_NEUTRAL);
+      }
+   }
 
    if(g_minimized) { ChartRedraw(); return; }
 
    // Body background - sized up front via ComputeBodyH() so it can be drawn first (and therefore
    // sit behind every row created below it - MT4 draws later-created objects on top).
    int bodyH = ComputeBodyH();
-   RectC(P+"BG", x, y+TH, PW, bodyH, C'22,25,35', corner);
+   RectC(P+"BG", x, y+TH, PW, bodyH, TH_PANEL_BG, corner);
 
    int cy = y + TH + GP;      // running layout cursor
    int bx = x + MX;           // body content left edge
@@ -675,23 +763,35 @@ void BuildPanel()
    // line keeps its own independent text-color feedback logic (see UpdateRiskDisplay()/
    // UpdateFloatingDisplay()); only the per-row BACKGROUND tinting from v27 is dropped since there's
    // now one shared background to tint, and the text color already carries the same information.
-   RectC(P+"BG_ALERT", bx, cy, cw, ALERT_H, C'26,29,40', corner);
-   g_statusBoxTop = cy;   // v2: ذخیره برای استفاده در SetStatus/SetStatus2
-   // v43 (Item 4): row slots now sit at cy+ALERT_PAD, cy+ALERT_PAD+STATUS_H+ALERT_PAD, and
-   // cy+ALERT_PAD+STATUS_H+ALERT_PAD+SUBROW_H+ALERT_PAD - i.e. top margin, both inter-line gaps,
-   // and the bottom margin (box bottom is cy+ALERT_H, which by construction of ALERT_H is exactly
-   // ALERT_PAD below where the Floating row ends) are all the same ALERT_PAD, replacing the old
-   // flush-top/ad-hoc-nudge stack.
-   LblCC(P+"L_STATUS",  bx, cy+ALERT_PAD, cw, STATUS_H, "", clrLimeGreen,    9, false, corner, 0);
-   LblCC(P+"L_STATUS2", bx, cy+ALERT_PAD, cw, STATUS_H, "", C'110,110,135',  7, false, corner, 6);
-   // v29 (Part 3): initial placeholder color changed from clrLimeGreen to CLR_NEUTRAL (grey) to
-   // match the new 3-state rule's normal state - both are overwritten on the first UpdateRiskDisplay()/
-   // UpdateFloatingDisplay() tick anyway, this is just so nothing flashes green before that.
-   // v99 (FEAT-045): خط ثابت «درصد ریسک + حالت» - همیشه دیده می‌شود (قبلاً درصد روی دکمه‌ی Risk بود و با دکمه‌های 1/4 و 1/8 ریز می‌شد)
-   LblCC(P+"L_RISKINFO", bx, cy+ALERT_PAD*2+STATUS_H, cw, SUBROW_H, "Risk: "+DoubleToStr(g_effRiskPerTrade,2)+"% | Full", CLR_NEUTRAL, 8, false, corner);
-   LblCC(P+"L_TRISK",   bx, cy+ALERT_PAD*3+STATUS_H+SUBROW_H, cw, SUBROW_H, "Open Risk: 0.00%/"+DoubleToStr(g_effMaxTotalRisk,2)+"%", CLR_NEUTRAL, 8, false, corner);
-   LblCC(P+"L_FDD",     bx, cy+ALERT_PAD*4+STATUS_H+SUBROW_H*2, cw, SUBROW_H, "Floating: 0.00% / "+DoubleToStr(MathAbs(InpMaxFloatingDDPercent),2)+"%", CLR_NEUTRAL, 8, false, corner);
-   cy += ALERT_H + GP;
+   // v110 P2: notification box (34px, two lines) + separate info box (Risk / Open Risk / Floating)
+   RectC(P+"BG_ALERT", bx, cy, cw, STATBOX_H, TH_ALERT_BG, corner);
+   g_statusBoxTop = cy;   // used by SetStatus/SetStatus2/UpdateSystemStatus (center line = top+17, two lines = top+10 / top+24)
+   LblCC(P+"L_STATUS",  bx, cy+SC(5),  cw, SC(24), "", TH_OK,      9, true, corner, 0);
+   LblCC(P+"L_STATUS2", bx, cy+SC(5),  cw, SC(24), "", TH_STATUS2, 7, false, corner, 6);
+   int infoY = cy + STATBOX_H + GP;
+   RectC(P+"BG_INFO", bx, infoY, cw, RM_InfoBoxH(), TH_BOX_BG, corner);
+   if(RM_UtilCompact())
+   {
+      // v110 P4h: سه ستون: عنوان ریز + مقدار (Consolas)
+      int ucW = cw/3, ucW3 = cw - 2*ucW;
+      string ucCap[3]; ucCap[0]="RISK"; ucCap[1]="OPEN"; ucCap[2]="FLOAT";
+      string ucNm[3];  ucNm[0]="U_RISK_V"; ucNm[1]="U_OPEN_V"; ucNm[2]="U_FDD_V";
+      for(int uc=0; uc<3; uc++)
+      {
+         int ux = bx + uc*ucW, uw = (uc==2) ? ucW3 : ucW;
+         LblCC(P+"U_CAP"+IntegerToString(uc), ux, infoY+SC(3), uw, SC(12), ucCap[uc], TH_NEUTRAL, 6, true, corner, 0);
+         LblCC(P+ucNm[uc], ux, infoY+SC(17), uw, SC(18), "--", CLR_NEUTRAL, 9, false, corner, 0);
+         ObjectSetString(0,P+ucNm[uc],OBJPROP_FONT,"Consolas");
+      }
+   }
+   else
+   {
+   LblCC(P+"L_RISKINFO", bx, infoY+ALERT_PAD,               cw, SUBROW_H, "Risk: "+DoubleToStr(g_effRiskPerTrade,2)+"% | Full", CLR_NEUTRAL, 8, false, corner);
+      LblCC(P+"L_TRISK",    bx, infoY+ALERT_PAD*2+SUBROW_H,    cw, SUBROW_H, "Open Risk: 0.00%/"+DoubleToStr(g_effMaxTotalRisk,2)+"%", CLR_NEUTRAL, 8, false, corner);
+      LblCC(P+"L_FDD",      bx, infoY+ALERT_PAD*3+SUBROW_H*2,  cw, SUBROW_H, "Floating: 0.00% / "+DoubleToStr(MathAbs(InpMaxFloatingDDPercent),2)+"%", CLR_NEUTRAL, 8, false, corner, 0);
+      if(g_themeId==RM_THEME_MONO) { ObjectSetString(0,P+"L_RISKINFO",OBJPROP_FONT,"Consolas"); ObjectSetString(0,P+"L_TRISK",OBJPROP_FONT,"Consolas"); ObjectSetString(0,P+"L_FDD",OBJPROP_FONT,"Consolas"); }   // v110 P3
+   }
+   cy += RM_AlertTotalH() + GP;
 
    // v31 (Dashboard Architecture: Trading + Utility Split, Change 1/4): Risk/RR, Market/Pending,
    // and every action/monitoring row below now build ONLY inside Trading. Utility is a dedicated
@@ -708,12 +808,12 @@ void BuildPanel()
       // at the end of this function (RISK_BG/BORDER_FULL/HALF for Risk, RRGlowColors() bg+border
       // ramp for RR).
       int rrW1 = (cw-GP)/2, rrW2 = cw-GP-rrW1;
-      BtnC(P+"BTN_RISKTOGGLE", bx,         cy, rrW1, RISKRR_H, "Risk: Full", C'70,70,80', corner, 8);  // v99 (FEAT-045): دکمه فقط حالت را نشان می‌دهد؛ درصد در خط L_RISKINFO بالای پنل
-      BtnC(P+"BTN_RR",         bx+rrW1+GP, cy, rrW2, RISKRR_H, RRLabelText(),      C'70,70,80', corner, 8);  // v45 (Punch List Round 3, Item 3)
+      BtnC(P+"BTN_RISKTOGGLE", bx,         cy, rrW1, RISKRR_H, "Risk: Full", TH_BTN, corner, 9);  // v99 (FEAT-045): دکمه فقط حالت را نشان می‌دهد؛ درصد در خط L_RISKINFO بالای پنل
+      BtnC(P+"BTN_RR",         bx+rrW1+GP, cy, rrW2, RISKRR_H, RRLabelText(),      TH_BTN, corner, 9);  // v45 (Punch List Round 3, Item 3)
       cy += RISKRR_H + GP;
 
       // v90 (FEAT-044 فاز ۱): ردیف نازک Scale-in بالای MARKET/PENDING. خاکستری = خاموش/غیرفعال، بنفش = روشن. رنگ/متن توسط UpdateScaleInButton() تنظیم می‌شود.
-      BtnC(P+"BTN_SCALEIN", bx, cy, cw, SCALEIN_H, "Scale-in: OFF", C'55,55,62', corner, 8);
+      BtnC(P+"BTN_SCALEIN", bx, cy, cw, SCALEIN_H, "Scale-in: OFF", TH_BTN_DARK, corner, 9);
       cy += SCALEIN_H + GP;
 
       // v28 (Change 4, revised again): MT4 buttons don't render "\n" as a line break in their
@@ -723,6 +823,8 @@ void BuildPanel()
       // click-handler code needs no changes), with two separate bold OBJ_LABEL text lines drawn on
       // top of it. Labels are non-clickable (SELECTABLE=false, same as every other LblCC() in this
       // file), so clicks anywhere in the button's area still land on the button underneath.
+      LblCC(P+"L_ENTRYSEC", bx, cy, cw, SC(12), "ENTRY", TH_NEUTRAL, 7, true, corner, 0);   // v110 P2b
+      cy += SC(14);
       int mpW1 = (cw-GP)/2, mpW2 = cw-GP-mpW1;
       // v29 revision 2 (Mahmoud feedback): Market/Pending are the panel's primary action buttons -
       // now built with MP_BASE_GREY, a lighter grey than the rest of the panel's controls (~2-3
@@ -746,10 +848,10 @@ void BuildPanel()
       // around the button's true vertical midpoint with a fixed, much tighter gap between their centers.
       int mpMidY   = cy + MP_H/2;
       int mpHalfGap = SC(8);   // v32: scaled - half of the desired vertical gap between the two stacked line centers
-      LblCC(P+"L_MKT1", bx,         mpMidY-mpHalfGap, mpW1, 0, "MARKET",  clrWhite, 10, true, corner, 0);
-      LblCC(P+"L_MKT2", bx,         mpMidY+mpHalfGap, mpW1, 0, "ORDER",   clrWhite, 10, true, corner, 0);
-      LblCC(P+"L_PND1", bx+mpW1+GP, mpMidY-mpHalfGap, mpW2, 0, "PENDING", clrWhite, 10, true, corner, 0);
-      LblCC(P+"L_PND2", bx+mpW1+GP, mpMidY+mpHalfGap, mpW2, 0, "ORDER",   clrWhite, 10, true, corner, 0);
+      LblCC(P+"L_MKT1", bx,         mpMidY-mpHalfGap, mpW1, 0, "MARKET",  TH_WHITE, 11, true, corner, 0);
+      LblCC(P+"L_MKT2", bx,         mpMidY+mpHalfGap, mpW1, 0, "ORDER",   TH_WHITE, 11, true, corner, 0);
+      LblCC(P+"L_PND1", bx+mpW1+GP, mpMidY-mpHalfGap, mpW2, 0, "PENDING", TH_WHITE, 11, true, corner, 0);
+      LblCC(P+"L_PND2", bx+mpW1+GP, mpMidY+mpHalfGap, mpW2, 0, "ORDER",   TH_WHITE, 11, true, corner, 0);
       // v45 (Item 6): was a plain "0" - now PANEL_ZORDER_FG (LblCC's own new default already sets
       // this; kept explicit here so the BUG-031 "button beats its own label" relationship stays
       // self-documenting at the call site instead of relying on a default set two functions away).
@@ -763,10 +865,12 @@ void BuildPanel()
       // persistent "active" state (unlike Market/Pending or Trailing), so they now default to
       // the same neutral grey as everything else instead of a fixed blue/orange - nothing here
       // should read as "currently active" when nothing has actually happened yet.
+      LblCC(P+"L_MANAGESEC", bx, cy, cw, SC(12), "MANAGE", TH_NEUTRAL, 7, true, corner, 0);   // v110 P2b
+      cy += SC(14);
       int aw1 = (cw-GP)/2, aw2 = cw-GP-aw1;
       g_halfCloseMenuAnchorX = bx; g_halfCloseMenuAnchorY = cy; g_halfCloseMenuAnchorW = cw;  // v37 PART B
-      BtnC(P+"BTN_BE",   bx,         cy, aw1, ACT_H, "Break Even", C'70,70,80', corner, 9);
-      BtnC(P+"BTN_HALF", bx+aw1+GP,  cy, aw2, ACT_H, "Half Close", C'70,70,80', corner, 9);
+      BtnC(P+"BTN_BE",   bx,         cy, aw1, ACT_H, "Break Even", TH_BTN, corner, 10);
+      BtnC(P+"BTN_HALF", bx+aw1+GP,  cy, aw2, ACT_H, "Half Close", TH_BTN, corner, 10);
       cy += ACT_H + GP;
 
       // Full Close / Trailing - v28 (Change 6): this row's position is remembered as the Close
@@ -777,22 +881,202 @@ void BuildPanel()
       // (Mahmoud feedback) to match the two-word naming convention of the other action buttons
       // (state is still shown by color alone, not by an ON/OFF text suffix).
       g_closeMenuAnchorX = bx; g_closeMenuAnchorY = cy; g_closeMenuAnchorW = cw;
-      BtnC(P+"BTN_FULL",  bx,        cy, aw1, ACT_H, "BULK CLOSE", C'70,70,80', corner, 9);
+      BtnC(P+"BTN_FULL",  bx,        cy, aw1, ACT_H, "BULK CLOSE", TH_BTN, corner, 10);
       BtnC(P+"BTN_TRAIL", bx+aw1+GP, cy, aw2, ACT_H, "Auto Trail",
-           g_trailingButtonOn?C'0,150,150':C'70,70,80', corner, 9);
+           g_trailingButtonOn?TH_ACTIVE:TH_BTN, corner, 9);
       cy += ACT_H + GP;
+      // v110 P4: در تم Mono منوی Close زیر ردیف BULK CLOSE باز می‌شود (فضا رزرو می‌شود) و روی بقیه‌ی پنل نمی‌افتد
+      if(g_themeId==RM_THEME_MONO && g_fullCloseMenuOpen)
+      {
+         g_closeMenuAnchorY = cy;
+         cy += 2*(CLOSE_GRID_ROW_H + CLOSE_GRID_GAP);
+      }
 
       // Mkt CD / Beh CD - unchanged from v27 Change 4 (still two independently-colored halves,
       // only this task's Changes 3/5 merge the alert box and Performance box, not this row)
+      LblCC(P+"L_BEHSEC", bx, cy, cw, SC(12), "BEHAVIOR CONTROL", TH_NEUTRAL, 7, true, corner, 0);   // v110 P2
+      cy += SC(14);
       int cdw1 = (cw-GP)/2, cdw2 = cw-GP-cdw1;
       // v29 (Part 3): initial placeholder colors changed to the neutral grey/dark-grey pair used
       // by the 3-state rule's normal state - overwritten on the first UpdateCooldownDisplay() tick.
-      RectC(P+"BG_MKT",  bx,         cy, cdw1, CD_H, C'38,38,42', corner);
-      LblCC(P+"L_MKTCD", bx,         cy, cdw1, CD_H, "Mkt CD: 0/"+IntegerToString(MarketCDCount), CLR_NEUTRAL, 8, false, corner, 0);
-      RectC(P+"BG_BEH",  bx+cdw1+GP, cy, cdw2, CD_H, C'38,38,42', corner);
-      LblCC(P+"L_BEHCD", bx+cdw1+GP, cy, cdw2, CD_H, "Beh CD: 0/"+IntegerToString(BehaviorCDCount), CLR_NEUTRAL, 8, false, corner, 0);
+      // v110 P3: یک کادر واحد با خط جداکننده (بدون فاصله) + نوار پله‌ای (Segment) زیر عدد
+      int cdGap = (g_themeId==RM_THEME_MONO) ? 0 : GP;
+      cdw2 = cw - cdw1 - cdGap;
+      RectC(P+"BG_MKT",  bx,              cy, cdw1, CD_H, TH_CD_BG, corner);
+      RectC(P+"BG_BEH",  bx+cdw1+cdGap,   cy, cdw2, CD_H, TH_CD_BG, corner);
+      if(g_themeId==RM_THEME_MONO) RectC(P+"CD_DIV", bx+cdw1, cy+SC(6), 1, CD_H-SC(12), TH_BEVEL_SH, corner);
+      LblCC(P+"L_MKTCAP", bx, cy+SC(3), cdw1, SC(12), "MKT CD", TH_NEUTRAL, 7, true, corner, 0);
+      LblCC(P+"L_MKTCD", bx, cy+SC(14), cdw1, CD_H-SC(24), "0/"+IntegerToString(MarketCDCount), CLR_NEUTRAL, 14, true, corner, 0);
+      LblCC(P+"L_BEHCAP", bx+cdw1+cdGap, cy+SC(3), cdw2, SC(12), "BEH CD", TH_NEUTRAL, 7, true, corner, 0);
+      LblCC(P+"L_BEHCD", bx+cdw1+cdGap, cy+SC(14), cdw2, CD_H-SC(24), "0/"+IntegerToString(BehaviorCDCount), CLR_NEUTRAL, 14, true, corner, 0);
+      if(g_themeId==RM_THEME_MONO)
+      {
+         ObjectSetString(0,P+"L_MKTCD",OBJPROP_FONT,"Consolas Bold");
+         ObjectSetString(0,P+"L_BEHCD",OBJPROP_FONT,"Consolas Bold");
+      }
+      // پله‌ها: حداکثر ۶ تا؛ رنگ‌دهی در UpdateCooldownDisplay()
+      g_cdSegM = MathMin(MarketCDCount,6);  g_cdSegB = MathMin(BehaviorCDCount,6);
+      for(int sg=0; sg<g_cdSegM; sg++)
+      {
+         int sw = (cdw1-SC(16)-(g_cdSegM-1)*SC(3))/g_cdSegM;
+         RectC(P+"SEG_M"+IntegerToString(sg), bx+SC(8)+sg*(sw+SC(3)), cy+CD_H-SC(9), sw, SC(4), TH_BTN, corner);
+      }
+      for(int sg2=0; sg2<g_cdSegB; sg2++)
+      {
+         int sw2 = (cdw2-SC(16)-(g_cdSegB-1)*SC(3))/g_cdSegB;
+         RectC(P+"SEG_B"+IntegerToString(sg2), bx+cdw1+cdGap+SC(8)+sg2*(sw2+SC(3)), cy+CD_H-SC(9), sw2, SC(4), TH_BTN, corner);
+      }
       cy += CD_H + GP;
 
+      // v31 (Change 2/4): the "🛠️ Tools" drawer that used to sit here (below Performance) is gone
+      // from Trading entirely - it now lives on Utility instead, below.
+
+      UpdateModeButtons();
+      UpdateHalfRiskButton();
+      UpdateRRButton();
+      UpdateTrailButton();
+   }
+   else if(g_dashboardMode==DASH_UTILITY) // v31 (Change 2): DASH_UTILITY - dedicated workspace for supporting tools. Only the
+        // alert/status box (built above, common to both dashboards - Change 3) and the Tools
+        // drawer live here; no trading controls of any kind. Replaces v28 Change 8's condensed
+        // 4-button COMPACT action row entirely (not a resize of it - Utility isn't a smaller
+        // Trading dashboard, it's a different dashboard with a different purpose).
+   {
+      // v43 (Item 3): "Tools" is now a plain static section separator, not an expand/collapse
+      // toggle - the buttons below are always visible. Reasoning: ~99% of the time a trader opens
+      // the Utility dashboard at all, it's specifically to use one of these tools, so the old
+      // path (open Utility -> open Tools drawer -> pick tool) had one extra click for almost no
+      // benefit. BTN_TOOLS object name kept as-is for the header label/background, but it no
+      // longer has a click handler (see OnChartEvent()) and no longer carries [+]/[-] state.
+      if(g_themeId==RM_THEME_MONO)   // v110 P4h: عنوان بخش‌ها مطابق ماکاپ (LEVELS / DRAWING / DATA / SESSION)
+      {
+         LblCC(P+"L_SEC_LEVELS", bx, cy, cw, SC(12), "LEVELS", TH_NEUTRAL, 7, true, corner, 0);
+         cy += SC(14);
+      }
+      else
+      {
+         BtnC(P+"BTN_TOOLS", bx, cy, cw, TOOLS_HDR_H, "Tools", TH_DRAWER, corner, 8);
+         cy += TOOLS_HDR_H;
+      }
+
+      {
+         cy += SC(3);  // v32: scaled section top padding
+         // v34.4 (Item 2): with Remove Indicators gone the remaining count is even (8 items) -
+         // uniform 2-per-row grid, half-width buttons throughout, replacing the mixed
+         // half/third/full-width rows from the base v34 design.
+         int toolsHalfW1 = (cw-GP)/2, toolsHalfW2 = cw-GP-toolsHalfW1;
+
+         // Row 1: BE Ref Line (v79، Item 4: دکمه‌ی CANDLE TIMER که قبلاً اینجا نیمی از این ردیف
+         // رو می‌گرفت حذف شد - شمارش معکوس کندل حالا همیشه از OnInit() فعاله، نیازی به دکمه
+         // نداره. جای خالی حاصل با گسترش BE REF LINE به کل عرض ردیف - بدون گپ - جبران شد؛ بقیه‌ی
+         // دکمه‌ها/چیدمان کلی پنل دست‌نخورده موند.
+         // v34.4 (Item 3): ON/OFF suffix dropped from the label text - color alone (teal=on,
+         // grey=off) now carries the state, same convention BTN_TRAIL already established in v29.
+         // v85 (کار اول): دکمه‌ی تمام‌عرض BE REF LINE نصف شد - نیمه‌ی چپ همان BE REF LINE (عملکرد بدون تغییر)،
+         // نیمه‌ی راست دکمه‌ی جدید HISTORY (باکس معاملات بسته‌شده - RM_Tools.mqh).
+         BtnC(P+"BTN_BEREF", bx, cy, toolsHalfW1, TOOLS_ROW_H, "BE REF LINE",
+              g_beRefOn ? TH_ACTIVE : TH_BTN, corner, 7);
+         FitBtnFontHalf(P+"BTN_BEREF", "BE REF LINE", toolsHalfW1, 7);
+         BtnC(P+"BTN_HISTORY", bx+toolsHalfW1+GP, cy, toolsHalfW2, TOOLS_ROW_H, "HISTORY",
+              g_histOn ? TH_ACTIVE : TH_BTN, corner, 7);
+         FitBtnFontHalf(P+"BTN_HISTORY", "HISTORY", toolsHalfW2, 7);
+         cy += TOOLS_ROW_H + GP;
+
+         // Row 2 (v54 rework - was a 2-button "Daily H/L | Weekly H/L" row, Monthly H/L sat in a
+         // separate Row 3 next to Hide Objects): Daily/Weekly/Monthly H/L merged into a single
+         // 3-button row to free up a row for Session Windows below - same equal-thirds geometry
+         // already proven by the Trading Reports drawer's Daily/Weekly/Monthly tab row
+         // (repTabW1/2/3 further down this file).
+         // v54.1 (فیکس - گزارش Mahmoud): "DAILY H/L"/"WEEKLY H/L"/"MONTHLY H/L" توی خونه‌های
+         // یک‌سومی جا نمی‌شدن (اسکرین‌شات: "MONTHLY H/L" با حرف اول بریده‌شده رندر می‌شد) -
+         // خلاصه‌نویسی شدن به "D H/L"/"W H/L"/"M H/L".
+         int toolsThirdW1 = (cw-2*GP)/3;
+         int toolsThirdW2 = toolsThirdW1;
+         int toolsThirdW3 = cw-2*GP-toolsThirdW1-toolsThirdW2;
+         BtnC(P+"BTN_HLDAILY", bx, cy, toolsThirdW1, TOOLS_ROW_H, "D H/L",
+              g_hlDailyOn ? TH_ACTIVE : TH_BTN, corner, 7);
+         BtnC(P+"BTN_HLWEEKLY", bx+toolsThirdW1+GP, cy, toolsThirdW2, TOOLS_ROW_H, "W H/L",
+              g_hlWeeklyOn ? TH_ACTIVE : TH_BTN, corner, 7);
+         BtnC(P+"BTN_HLMONTHLY", bx+toolsThirdW1+GP+toolsThirdW2+GP, cy, toolsThirdW3, TOOLS_ROW_H, "M H/L",
+              g_hlMonthlyOn ? TH_ACTIVE : TH_BTN, corner, 7);
+         // v54.1: kept as a safety net even with the shorter captions - never enlarges past sz=7,
+         // only shrinks further if a narrower box width at low Layout Scale still needs it.
+         FitBtnFontHalf(P+"BTN_HLDAILY",   "D H/L", toolsThirdW1, 7);
+         FitBtnFontHalf(P+"BTN_HLWEEKLY",  "W H/L", toolsThirdW2, 7);
+         FitBtnFontHalf(P+"BTN_HLMONTHLY", "M H/L", toolsThirdW3, 7);
+         cy += TOOLS_ROW_H + GP;
+
+         // Row 3 (v54): Session Windows | Hide Objects - SW takes the slot Monthly H/L used to sit
+         // in before the row-2 merge above freed it up.
+         // v54.1 (فیکس - گزارش Mahmoud): "SESSION WINDOWS" هم توی خونه‌ی نصفی جا نمی‌شد - به
+         // "SESSIONS" کوتاه شد.
+         // v57.4 (فیدبک Mahmoud - جابه‌جایی): جای BTN_MARKERS و BTN_SW (KEY TIME) با هم عوض شد -
+         // این ردیف حالا MARKERS | Hide Objects رو نشون می‌ده؛ Row 6 پایین‌تر حالا SESSION | KEY
+         // TIME رو نشون می‌ده. فقط جانمایی/موقعیت عوض شده - خودِ گلوبال‌ها/کلیک‌هندلرها دست‌نخورده.
+         if(g_themeId==RM_THEME_MONO) { LblCC(P+"L_SEC_DRAW", bx, cy, cw, SC(12), "DRAWING", TH_NEUTRAL, 7, true, corner, 0); cy += SC(14); }   // v110 P4h
+         BtnC(P+"BTN_MARKERS", bx, cy, toolsHalfW1, TOOLS_ROW_H, "MARKERS",
+              g_markersOn ? TH_ACTIVE : TH_BTN, corner, 7);
+         FitBtnFontHalf(P+"BTN_MARKERS", "MARKERS", toolsHalfW1, 7);
+         // v42 (Punch List, Item 1.4): active color harmonized to CLR_TOOLS_ACTIVE (the same
+         // teal every other Tools drawer toggle uses) - was C'190,140,0' (amber), a leftover
+         // one-off that didn't match the rest of the drawer.
+         BtnC(P+"BTN_HIDEOBJ", bx+toolsHalfW1+GP, cy, toolsHalfW2, TOOLS_ROW_H,
+              g_objectsHidden ? "Show Objects" : "Hide Objects",
+              g_objectsHidden ? CLR_TOOLS_ACTIVE : TH_BTN, corner, 7);
+         cy += TOOLS_ROW_H + GP;
+
+         // Row 4 (Items 7+8): R/R | Measure Move - renamed from "Fib R-Multiple"/"Fib Measure
+         // Move". Both rest at the same grey as every other Tools button (CLR_BTN_DEFAULT).
+         // v42 (Punch List, Item 1.1+1.2+1.3): now "arm, then click the chart" placement tools -
+         // BtnC's initial color reflects g_fiboArmed* so a panel rebuild (window resize, timeframe
+         // switch) mid-arm doesn't leave the button visually out of sync with the flag.
+         BtnC(P+"BTN_FIBRMULT", bx, cy, toolsHalfW1, TOOLS_ROW_H, "RISK/REWARD",
+              g_fiboArmedRR ? CLR_TOOLS_ACTIVE : CLR_BTN_DEFAULT, corner, 7);
+         BtnC(P+"BTN_FIBMEASURE", bx+toolsHalfW1+GP, cy, toolsHalfW2, TOOLS_ROW_H, "MEASURE MOVE",
+              g_fiboArmedMeasure ? CLR_TOOLS_ACTIVE : CLR_BTN_DEFAULT, corner, 7);
+         cy += TOOLS_ROW_H + GP;
+
+         // Row 5 (v55: تمام‌عرض "EXPORT CSV" - v56: نصف/نصف شد تا "TAG TRADES" هم جا بشه، بدون
+         // نیاز به افزایش TOOLS_ROW_COUNT - همون الگوی v54 که برای جا دادن Session Windows،
+         // Daily/Weekly/Monthly H/L رو از دو نصفی به یه سه‌تایی تبدیل کرد). هر دو Action-style
+         // (نه Toggle) - رنگ ثابت CLR_BTN_DEFAULT برای هر دو.
+         if(g_themeId==RM_THEME_MONO) { LblCC(P+"L_SEC_DATA", bx, cy, cw, SC(12), "DATA", TH_NEUTRAL, 7, true, corner, 0); cy += SC(14); }   // v110 P4h
+         BtnC(P+"BTN_EXPORTCSV", bx, cy, toolsHalfW1, TOOLS_ROW_H, "EXPORT CSV", CLR_BTN_DEFAULT, corner, 7);
+         // v56 (Trade Tagging): وقتی پنجره‌ی تگ‌گذاری بازه، رنگش CLR_TOOLS_ACTIVE می‌شه - همون
+         // قرارداد رنگی toggle-مانند بقیه‌ی ابزارهای این درایور (حتی با اینکه خودِ رفتار باز/بسته
+         // شدنش یه Action روی این دکمه‌ست، نه یه state دائمی مثل Candle Timer/SW).
+         BtnC(P+"BTN_TAGTRADES", bx+toolsHalfW1+GP, cy, toolsHalfW2, TOOLS_ROW_H, "TAG TRADES",
+              g_tagWindowOpen ? CLR_TOOLS_ACTIVE : CLR_BTN_DEFAULT, corner, 7);
+         cy += TOOLS_ROW_H + GP;
+
+         // Row 6 (v57, Item 3): Session Level | Entry/Exit Markers - هر دو toggle جدید با هم در
+         // یک ردیف نصف/نصف اضافه شدن (نه هرکدوم یک ردیف تمام‌عرض جدا) طبق تصمیم صریح تسک: عدد
+         // فرد ردیف/دکمه لایه‌بندی هم‌ردیف‌های نصفی رو خراب می‌کنه. رنگ toggle همون قرارداد
+         // teal=on/grey=off که BTN_SW/BTN_CANDLETIMER استفاده می‌کنن.
+         // v57.4 (فیدبک Mahmoud): این ردیف حالا SESSION | KEY TIME رو نشون می‌ده - BTN_MARKERS به
+         // Row 3 بالا منتقل شد (جاش رو با BTN_SW عوض کردیم). کپشن Session Level هم از "SESS LVL"
+         // به "SESSION" ساده شد.
+         // v107 (FEAT-063): EXPANDED = کپشنِ «SESSION E» + رنگِ آبی‌-سبز؛ COMPACT دقیقاً مثلِ قبل (۱ = SL_MODE_EXPANDED؛ ماکرو در RM_Tools بعد از این فایل است)
+         if(g_themeId==RM_THEME_MONO) { LblCC(P+"L_SEC_SESS", bx, cy, cw, SC(12), "SESSION", TH_NEUTRAL, 7, true, corner, 0); cy += SC(14); }   // v110 P4h
+         string slCap = (g_sessLvlOn && g_slMode == 1) ? "SESSION E" : "SESSION";
+         BtnC(P+"BTN_SESSLVL", bx, cy, toolsHalfW1, TOOLS_ROW_H, slCap,
+              g_sessLvlOn ? ((g_slMode == 1) ? TH_ACTIVE_ALT : TH_ACTIVE) : TH_BTN, corner, 7);
+         FitBtnFontHalf(P+"BTN_SESSLVL", slCap, toolsHalfW1, 7);
+         // v107 (FEAT-061): (۱ = KEYTIME_MODE_COMPACT؛ ماکرو در RM_Tools بعد از این فایل تعریف می‌شود) COMPACT = کپشنِ «KEY TIME C» + رنگِ آبی‌-سبزِ متفاوت؛ FULL دقیقاً مثلِ قبل
+         string swCap = (g_swOn && g_swMode == 1) ? "KEY TIME C" : "KEY TIME";
+         BtnC(P+"BTN_SW", bx+toolsHalfW1+GP, cy, toolsHalfW2, TOOLS_ROW_H, swCap,
+              g_swOn ? ((g_swMode == 1) ? TH_ACTIVE_ALT : TH_ACTIVE) : TH_BTN, corner, 7);
+         FitBtnFontHalf(P+"BTN_SW", swCap, toolsHalfW2, 7);
+         cy += TOOLS_ROW_H + GP;
+      }
+
+      // v43 (Item 2): Risk Lab / Journal / AI Coach placeholder rows removed entirely (not just
+      // dimmed/inactive as of v34.4) - none of the three have real designs yet, so they shouldn't
+      // set expectations. They'll be added back properly once each has an actual design. See
+      // ComputeBodyH() - PLACEHOLDER_ROW_COUNT contribution removed there to match.
+   }
+   else // DASH_REPORTS (v110 P2)
+   {
       // v28 (Change 5): TRUE single merged background behind Daily/Weekly/Monthly - one shared
       // BG_PERF RectC instead of v27's three individual BG_DPL/BG_WDD/BG_MDD color blocks. Still
       // three separate compact one-line rows with RB-as-prefix, unchanged from v27 - background/
@@ -803,16 +1087,13 @@ void BuildPanel()
       // grey, consistent with removing saturated colors from every "no real active/inactive
       // meaning" control - open vs. closed is still visible (lighter vs. darker grey), just no
       // longer a separate hue.
-      BtnC(P+"BTN_PERF", bx, cy, cw, PERF_HDR_H,
-           (g_perfDrawerOpen ? "[-] Performance" : "[+] Performance"),
-           g_perfDrawerOpen ? C'75,80,95' : C'50,54,68', corner, 8);
+      BtnC(P+"BTN_PERF", bx, cy, cw, PERF_HDR_H, "Performance", TH_DRAWER, corner, 8);   // v110 P2: static header (no collapse)
       cy += PERF_HDR_H;
 
-      if(g_perfDrawerOpen)
       {
          cy += SC(3);  // v32: scaled drawer top padding
          int perfBoxH = PERF_ROW_H*3 + PERF_BOX_PAD*2;
-         RectC(P+"BG_PERF", bx, cy, cw, perfBoxH, C'30,30,38', corner);
+         RectC(P+"BG_PERF", bx, cy, cw, perfBoxH, TH_BOX_BG, corner);
          // v29 (Part 3): each row split into two label objects so only the P/L percentage can
          // follow the grey/orange/red 3-state rule while the Trade R and RB figures stay
          // permanently grey (they have no limit/lock tied to them). Left segment holds the
@@ -837,147 +1118,12 @@ void BuildPanel()
          ObjectSetString(0, P+"L_MDD_RB", OBJPROP_FONT, "Consolas");
          cy += perfBoxH + GP;
       }
-      else cy += GP;
-      // v31 (Change 2/4): the "🛠️ Tools" drawer that used to sit here (below Performance) is gone
-      // from Trading entirely - it now lives on Utility instead, below.
-
-      UpdateModeButtons();
-      UpdateHalfRiskButton();
-      UpdateRRButton();
-      UpdateTrailButton();
-   }
-   else // v31 (Change 2): DASH_UTILITY - dedicated workspace for supporting tools. Only the
-        // alert/status box (built above, common to both dashboards - Change 3) and the Tools
-        // drawer live here; no trading controls of any kind. Replaces v28 Change 8's condensed
-        // 4-button COMPACT action row entirely (not a resize of it - Utility isn't a smaller
-        // Trading dashboard, it's a different dashboard with a different purpose).
-   {
-      // v43 (Item 3): "Tools" is now a plain static section separator, not an expand/collapse
-      // toggle - the buttons below are always visible. Reasoning: ~99% of the time a trader opens
-      // the Utility dashboard at all, it's specifically to use one of these tools, so the old
-      // path (open Utility -> open Tools drawer -> pick tool) had one extra click for almost no
-      // benefit. BTN_TOOLS object name kept as-is for the header label/background, but it no
-      // longer has a click handler (see OnChartEvent()) and no longer carries [+]/[-] state.
-      BtnC(P+"BTN_TOOLS", bx, cy, cw, TOOLS_HDR_H, "Tools", C'50,54,68', corner, 8);
-      cy += TOOLS_HDR_H;
-
-      {
-         cy += SC(3);  // v32: scaled section top padding
-         // v34.4 (Item 2): with Remove Indicators gone the remaining count is even (8 items) -
-         // uniform 2-per-row grid, half-width buttons throughout, replacing the mixed
-         // half/third/full-width rows from the base v34 design.
-         int toolsHalfW1 = (cw-GP)/2, toolsHalfW2 = cw-GP-toolsHalfW1;
-
-         // Row 1: BE Ref Line (v79، Item 4: دکمه‌ی CANDLE TIMER که قبلاً اینجا نیمی از این ردیف
-         // رو می‌گرفت حذف شد - شمارش معکوس کندل حالا همیشه از OnInit() فعاله، نیازی به دکمه
-         // نداره. جای خالی حاصل با گسترش BE REF LINE به کل عرض ردیف - بدون گپ - جبران شد؛ بقیه‌ی
-         // دکمه‌ها/چیدمان کلی پنل دست‌نخورده موند.
-         // v34.4 (Item 3): ON/OFF suffix dropped from the label text - color alone (teal=on,
-         // grey=off) now carries the state, same convention BTN_TRAIL already established in v29.
-         // v85 (کار اول): دکمه‌ی تمام‌عرض BE REF LINE نصف شد - نیمه‌ی چپ همان BE REF LINE (عملکرد بدون تغییر)،
-         // نیمه‌ی راست دکمه‌ی جدید HISTORY (باکس معاملات بسته‌شده - RM_Tools.mqh).
-         BtnC(P+"BTN_BEREF", bx, cy, toolsHalfW1, TOOLS_ROW_H, "BE REF LINE",
-              g_beRefOn ? C'0,150,150' : C'70,70,80', corner, 7);
-         FitBtnFontHalf(P+"BTN_BEREF", "BE REF LINE", toolsHalfW1, 7);
-         BtnC(P+"BTN_HISTORY", bx+toolsHalfW1+GP, cy, toolsHalfW2, TOOLS_ROW_H, "HISTORY",
-              g_histOn ? C'0,150,150' : C'70,70,80', corner, 7);
-         FitBtnFontHalf(P+"BTN_HISTORY", "HISTORY", toolsHalfW2, 7);
-         cy += TOOLS_ROW_H + GP;
-
-         // Row 2 (v54 rework - was a 2-button "Daily H/L | Weekly H/L" row, Monthly H/L sat in a
-         // separate Row 3 next to Hide Objects): Daily/Weekly/Monthly H/L merged into a single
-         // 3-button row to free up a row for Session Windows below - same equal-thirds geometry
-         // already proven by the Trading Reports drawer's Daily/Weekly/Monthly tab row
-         // (repTabW1/2/3 further down this file).
-         // v54.1 (فیکس - گزارش Mahmoud): "DAILY H/L"/"WEEKLY H/L"/"MONTHLY H/L" توی خونه‌های
-         // یک‌سومی جا نمی‌شدن (اسکرین‌شات: "MONTHLY H/L" با حرف اول بریده‌شده رندر می‌شد) -
-         // خلاصه‌نویسی شدن به "D H/L"/"W H/L"/"M H/L".
-         int toolsThirdW1 = (cw-2*GP)/3;
-         int toolsThirdW2 = toolsThirdW1;
-         int toolsThirdW3 = cw-2*GP-toolsThirdW1-toolsThirdW2;
-         BtnC(P+"BTN_HLDAILY", bx, cy, toolsThirdW1, TOOLS_ROW_H, "D H/L",
-              g_hlDailyOn ? C'0,150,150' : C'70,70,80', corner, 7);
-         BtnC(P+"BTN_HLWEEKLY", bx+toolsThirdW1+GP, cy, toolsThirdW2, TOOLS_ROW_H, "W H/L",
-              g_hlWeeklyOn ? C'0,150,150' : C'70,70,80', corner, 7);
-         BtnC(P+"BTN_HLMONTHLY", bx+toolsThirdW1+GP+toolsThirdW2+GP, cy, toolsThirdW3, TOOLS_ROW_H, "M H/L",
-              g_hlMonthlyOn ? C'0,150,150' : C'70,70,80', corner, 7);
-         // v54.1: kept as a safety net even with the shorter captions - never enlarges past sz=7,
-         // only shrinks further if a narrower box width at low Layout Scale still needs it.
-         FitBtnFontHalf(P+"BTN_HLDAILY",   "D H/L", toolsThirdW1, 7);
-         FitBtnFontHalf(P+"BTN_HLWEEKLY",  "W H/L", toolsThirdW2, 7);
-         FitBtnFontHalf(P+"BTN_HLMONTHLY", "M H/L", toolsThirdW3, 7);
-         cy += TOOLS_ROW_H + GP;
-
-         // Row 3 (v54): Session Windows | Hide Objects - SW takes the slot Monthly H/L used to sit
-         // in before the row-2 merge above freed it up.
-         // v54.1 (فیکس - گزارش Mahmoud): "SESSION WINDOWS" هم توی خونه‌ی نصفی جا نمی‌شد - به
-         // "SESSIONS" کوتاه شد.
-         // v57.4 (فیدبک Mahmoud - جابه‌جایی): جای BTN_MARKERS و BTN_SW (KEY TIME) با هم عوض شد -
-         // این ردیف حالا MARKERS | Hide Objects رو نشون می‌ده؛ Row 6 پایین‌تر حالا SESSION | KEY
-         // TIME رو نشون می‌ده. فقط جانمایی/موقعیت عوض شده - خودِ گلوبال‌ها/کلیک‌هندلرها دست‌نخورده.
-         BtnC(P+"BTN_MARKERS", bx, cy, toolsHalfW1, TOOLS_ROW_H, "MARKERS",
-              g_markersOn ? C'0,150,150' : C'70,70,80', corner, 7);
-         FitBtnFontHalf(P+"BTN_MARKERS", "MARKERS", toolsHalfW1, 7);
-         // v42 (Punch List, Item 1.4): active color harmonized to CLR_TOOLS_ACTIVE (the same
-         // teal every other Tools drawer toggle uses) - was C'190,140,0' (amber), a leftover
-         // one-off that didn't match the rest of the drawer.
-         BtnC(P+"BTN_HIDEOBJ", bx+toolsHalfW1+GP, cy, toolsHalfW2, TOOLS_ROW_H,
-              g_objectsHidden ? "Show Objects" : "Hide Objects",
-              g_objectsHidden ? CLR_TOOLS_ACTIVE : C'70,70,80', corner, 7);
-         cy += TOOLS_ROW_H + GP;
-
-         // Row 4 (Items 7+8): R/R | Measure Move - renamed from "Fib R-Multiple"/"Fib Measure
-         // Move". Both rest at the same grey as every other Tools button (CLR_BTN_DEFAULT).
-         // v42 (Punch List, Item 1.1+1.2+1.3): now "arm, then click the chart" placement tools -
-         // BtnC's initial color reflects g_fiboArmed* so a panel rebuild (window resize, timeframe
-         // switch) mid-arm doesn't leave the button visually out of sync with the flag.
-         BtnC(P+"BTN_FIBRMULT", bx, cy, toolsHalfW1, TOOLS_ROW_H, "RISK/REWARD",
-              g_fiboArmedRR ? CLR_TOOLS_ACTIVE : CLR_BTN_DEFAULT, corner, 7);
-         BtnC(P+"BTN_FIBMEASURE", bx+toolsHalfW1+GP, cy, toolsHalfW2, TOOLS_ROW_H, "MEASURE MOVE",
-              g_fiboArmedMeasure ? CLR_TOOLS_ACTIVE : CLR_BTN_DEFAULT, corner, 7);
-         cy += TOOLS_ROW_H + GP;
-
-         // Row 5 (v55: تمام‌عرض "EXPORT CSV" - v56: نصف/نصف شد تا "TAG TRADES" هم جا بشه، بدون
-         // نیاز به افزایش TOOLS_ROW_COUNT - همون الگوی v54 که برای جا دادن Session Windows،
-         // Daily/Weekly/Monthly H/L رو از دو نصفی به یه سه‌تایی تبدیل کرد). هر دو Action-style
-         // (نه Toggle) - رنگ ثابت CLR_BTN_DEFAULT برای هر دو.
-         BtnC(P+"BTN_EXPORTCSV", bx, cy, toolsHalfW1, TOOLS_ROW_H, "EXPORT CSV", CLR_BTN_DEFAULT, corner, 7);
-         // v56 (Trade Tagging): وقتی پنجره‌ی تگ‌گذاری بازه، رنگش CLR_TOOLS_ACTIVE می‌شه - همون
-         // قرارداد رنگی toggle-مانند بقیه‌ی ابزارهای این درایور (حتی با اینکه خودِ رفتار باز/بسته
-         // شدنش یه Action روی این دکمه‌ست، نه یه state دائمی مثل Candle Timer/SW).
-         BtnC(P+"BTN_TAGTRADES", bx+toolsHalfW1+GP, cy, toolsHalfW2, TOOLS_ROW_H, "TAG TRADES",
-              g_tagWindowOpen ? CLR_TOOLS_ACTIVE : CLR_BTN_DEFAULT, corner, 7);
-         cy += TOOLS_ROW_H + GP;
-
-         // Row 6 (v57, Item 3): Session Level | Entry/Exit Markers - هر دو toggle جدید با هم در
-         // یک ردیف نصف/نصف اضافه شدن (نه هرکدوم یک ردیف تمام‌عرض جدا) طبق تصمیم صریح تسک: عدد
-         // فرد ردیف/دکمه لایه‌بندی هم‌ردیف‌های نصفی رو خراب می‌کنه. رنگ toggle همون قرارداد
-         // teal=on/grey=off که BTN_SW/BTN_CANDLETIMER استفاده می‌کنن.
-         // v57.4 (فیدبک Mahmoud): این ردیف حالا SESSION | KEY TIME رو نشون می‌ده - BTN_MARKERS به
-         // Row 3 بالا منتقل شد (جاش رو با BTN_SW عوض کردیم). کپشن Session Level هم از "SESS LVL"
-         // به "SESSION" ساده شد.
-         // v107 (FEAT-063): EXPANDED = کپشنِ «SESSION E» + رنگِ آبی‌-سبز؛ COMPACT دقیقاً مثلِ قبل (۱ = SL_MODE_EXPANDED؛ ماکرو در RM_Tools بعد از این فایل است)
-         string slCap = (g_sessLvlOn && g_slMode == 1) ? "SESSION E" : "SESSION";
-         BtnC(P+"BTN_SESSLVL", bx, cy, toolsHalfW1, TOOLS_ROW_H, slCap,
-              g_sessLvlOn ? ((g_slMode == 1) ? C'0,110,170' : C'0,150,150') : C'70,70,80', corner, 7);
-         FitBtnFontHalf(P+"BTN_SESSLVL", slCap, toolsHalfW1, 7);
-         // v107 (FEAT-061): (۱ = KEYTIME_MODE_COMPACT؛ ماکرو در RM_Tools بعد از این فایل تعریف می‌شود) COMPACT = کپشنِ «KEY TIME C» + رنگِ آبی‌-سبزِ متفاوت؛ FULL دقیقاً مثلِ قبل
-         string swCap = (g_swOn && g_swMode == 1) ? "KEY TIME C" : "KEY TIME";
-         BtnC(P+"BTN_SW", bx+toolsHalfW1+GP, cy, toolsHalfW2, TOOLS_ROW_H, swCap,
-              g_swOn ? ((g_swMode == 1) ? C'0,110,170' : C'0,150,150') : C'70,70,80', corner, 7);
-         FitBtnFontHalf(P+"BTN_SW", swCap, toolsHalfW2, 7);
-         cy += TOOLS_ROW_H + GP;
-      }
-
       // v35 (Utility Phase A, Part 2): "Trading Reports" drawer - second module, directly below
       // Tools. Same collapsible header mechanic (BtnC toggle, full rebuild on click - see
       // OnChartEvent()). Defaults CLOSED, like Tools (not Performance).
-      BtnC(P+"BTN_REPORTS", bx, cy, cw, REPORTS_HDR_H,
-           (g_reportsDrawerOpen ? "[-] Trading Reports" : "[+] Trading Reports"),
-           g_reportsDrawerOpen ? C'75,80,95' : C'50,54,68', corner, 8);
+      BtnC(P+"BTN_REPORTS", bx, cy, cw, REPORTS_HDR_H, "Trading Reports", TH_DRAWER, corner, 8);   // v110 P2: static header
       cy += REPORTS_HDR_H;
 
-      if(g_reportsDrawerOpen)
       {
          cy += SC(3);  // v32-style scaled drawer top padding, same as Tools/Performance
 
@@ -989,11 +1135,11 @@ void BuildPanel()
          int repTabW2 = repTabW1;
          int repTabW3 = cw-2*GP-repTabW1-repTabW2;
          BtnC(P+"BTN_REP_DAILY", bx, cy, repTabW1, REPORTS_TAB_H, "DAILY",
-              (g_reportsPeriod==0) ? C'70,110,170' : C'55,55,62', corner, 7);
+              (g_reportsPeriod==0) ? TH_SEL_BLUE : TH_BTN_DARK, corner, 7);
          BtnC(P+"BTN_REP_WEEKLY", bx+repTabW1+GP, cy, repTabW2, REPORTS_TAB_H, "WEEKLY",
-              (g_reportsPeriod==1) ? C'70,110,170' : C'55,55,62', corner, 7);
+              (g_reportsPeriod==1) ? TH_SEL_BLUE : TH_BTN_DARK, corner, 7);
          BtnC(P+"BTN_REP_MONTHLY", bx+repTabW1+GP+repTabW2+GP, cy, repTabW3, REPORTS_TAB_H, "MONTHLY",
-              (g_reportsPeriod==2) ? C'70,110,170' : C'55,55,62', corner, 7);
+              (g_reportsPeriod==2) ? TH_SEL_BLUE : TH_BTN_DARK, corner, 7);
          cy += REPORTS_TAB_H + GP;
 
          // Merged stats box - REPORTS_ROW_COUNT rows x 2 metrics each, same "one shared RectC
@@ -1002,7 +1148,7 @@ void BuildPanel()
          // display, so the grey/orange/red 3-state rule (WARN_RATIO etc.) intentionally does not
          // apply here (see UpdateReportsDisplay()).
          int repBoxH = REPORTS_ROW_COUNT*REPORTS_ROW_H + REPORTS_BOX_PAD*2;
-         RectC(P+"BG_REPORTS", bx, cy, cw, repBoxH, C'30,30,38', corner);
+         RectC(P+"BG_REPORTS", bx, cy, cw, repBoxH, TH_BOX_BG, corner);
          // v45 (Mahmoud feedback after Item 5): DD row got longer once "(-X.X%)" was added, so the
          // left column now reads cramped/flush against the box's left edge while the right column
          // (shorter PF/Exp/Trades strings) leaves visible spare room on the right - all 6 items
@@ -1018,12 +1164,7 @@ void BuildPanel()
          LblCC(P+"L_REP_COUNT",   repX+repColW, cy+REPORTS_BOX_PAD+REPORTS_ROW_H*2, cw-repColW-repInset, REPORTS_ROW_H, "Trades: --",   CLR_NEUTRAL, REPORTS_ROW_FONT, false, corner, 0);
          cy += repBoxH + GP;
       }
-      else cy += GP;
 
-      // v43 (Item 2): Risk Lab / Journal / AI Coach placeholder rows removed entirely (not just
-      // dimmed/inactive as of v34.4) - none of the three have real designs yet, so they shouldn't
-      // set expectations. They'll be added back properly once each has an actual design. See
-      // ComputeBodyH() - PLACEHOLDER_ROW_COUNT contribution removed there to match.
    }
 
    // v31: Update*() calls for Trading-only controls are guarded above (inside the DASH_TRADING
@@ -1051,7 +1192,7 @@ void UpdateTrailButton()
    // v39 (Mahmoud feedback): label renamed "Trail" -> "Auto Trail" to match the two-word naming
    // convention of the other action buttons (BULK CLOSE, Break Even, Half Close). Functionality
    // (manual toggle + Auto Trigger) is unchanged - this is a label-only edit.
-   ObjectSetInteger(0,P+"BTN_TRAIL",OBJPROP_BGCOLOR, g_trailingButtonOn?C'0,150,150':C'70,70,80');
+   BtnBg(P+"BTN_TRAIL", g_trailingButtonOn?TH_ACTIVE:TH_BTN);
    ObjectSetString (0,P+"BTN_TRAIL",OBJPROP_TEXT, "Auto Trail");
    ChartRedraw();
 }
@@ -1069,7 +1210,7 @@ void UpdateTrailButton()
 void UpdateHLDailyButton()
 {
    if(ObjectFind(0,P+"BTN_HLDAILY")<0) return;
-   ObjectSetInteger(0,P+"BTN_HLDAILY",OBJPROP_BGCOLOR, g_hlDailyOn?C'0,150,150':C'70,70,80');
+   BtnBg(P+"BTN_HLDAILY", g_hlDailyOn?TH_ACTIVE:TH_BTN);
    ObjectSetString (0,P+"BTN_HLDAILY",OBJPROP_TEXT,   "D H/L");  // v54.1: shortened from "DAILY H/L" - see BuildPanel()
    ChartRedraw();
 }
@@ -1078,7 +1219,7 @@ void UpdateHLDailyButton()
 void UpdateHLWeeklyButton()
 {
    if(ObjectFind(0,P+"BTN_HLWEEKLY")<0) return;
-   ObjectSetInteger(0,P+"BTN_HLWEEKLY",OBJPROP_BGCOLOR, g_hlWeeklyOn?C'0,150,150':C'70,70,80');
+   BtnBg(P+"BTN_HLWEEKLY", g_hlWeeklyOn?TH_ACTIVE:TH_BTN);
    ObjectSetString (0,P+"BTN_HLWEEKLY",OBJPROP_TEXT,   "W H/L");  // v54.1: shortened from "WEEKLY H/L" - see BuildPanel()
    ChartRedraw();
 }
@@ -1087,7 +1228,7 @@ void UpdateHLWeeklyButton()
 void UpdateHLMonthlyButton()
 {
    if(ObjectFind(0,P+"BTN_HLMONTHLY")<0) return;
-   ObjectSetInteger(0,P+"BTN_HLMONTHLY",OBJPROP_BGCOLOR, g_hlMonthlyOn?C'0,150,150':C'70,70,80');
+   BtnBg(P+"BTN_HLMONTHLY", g_hlMonthlyOn?TH_ACTIVE:TH_BTN);
    ObjectSetString (0,P+"BTN_HLMONTHLY",OBJPROP_TEXT,   "M H/L");  // v54.1: shortened from "MONTHLY H/L" - see BuildPanel()
    ChartRedraw();
 }
@@ -1098,7 +1239,7 @@ void UpdateHLMonthlyButton()
 void UpdateHideObjButton()
 {
    if(ObjectFind(0,P+"BTN_HIDEOBJ")<0) return;
-   ObjectSetInteger(0,P+"BTN_HIDEOBJ",OBJPROP_BGCOLOR, g_objectsHidden?CLR_TOOLS_ACTIVE:C'70,70,80');
+   BtnBg(P+"BTN_HIDEOBJ", g_objectsHidden?CLR_TOOLS_ACTIVE:TH_BTN);
    ObjectSetString (0,P+"BTN_HIDEOBJ",OBJPROP_TEXT,   g_objectsHidden?"Show Objects":"Hide Objects");
    ChartRedraw();
 }
@@ -1107,7 +1248,7 @@ void UpdateHideObjButton()
 void UpdateBERefButton()
 {
    if(ObjectFind(0,P+"BTN_BEREF")<0) return;
-   ObjectSetInteger(0,P+"BTN_BEREF",OBJPROP_BGCOLOR, g_beRefOn?C'0,150,150':C'70,70,80');
+   BtnBg(P+"BTN_BEREF", g_beRefOn?TH_ACTIVE:TH_BTN);
    ObjectSetString (0,P+"BTN_BEREF",OBJPROP_TEXT,   "BE REF LINE");
    ChartRedraw();
 }
@@ -1116,7 +1257,7 @@ void UpdateBERefButton()
 void UpdateHistoryButton()
 {
    if(ObjectFind(0,P+"BTN_HISTORY")<0) return;
-   ObjectSetInteger(0,P+"BTN_HISTORY",OBJPROP_BGCOLOR, g_histOn?C'0,150,150':C'70,70,80');
+   BtnBg(P+"BTN_HISTORY", g_histOn?TH_ACTIVE:TH_BTN);
    ObjectSetString (0,P+"BTN_HISTORY",OBJPROP_TEXT,   "HISTORY");
    ChartRedraw();
 }
@@ -1130,7 +1271,7 @@ void UpdateSWButton()
    if(ObjectFind(0,P+"BTN_SW")<0) return;
    // v107 (FEAT-061): حالتِ COMPACT = کپشن/رنگِ متفاوت (فونتِ دکمه از ساختِ اولیه می‌ماند؛ «KEY TIME C» فقط ۲ کاراکتر بلندتر است)
    bool swCompact = (g_swOn && g_swMode == 1);
-   ObjectSetInteger(0,P+"BTN_SW",OBJPROP_BGCOLOR, g_swOn ? (swCompact ? C'0,110,170' : C'0,150,150') : C'70,70,80');
+   BtnBg(P+"BTN_SW", g_swOn ? (swCompact ? TH_ACTIVE_ALT : TH_ACTIVE) : TH_BTN);
    ObjectSetString (0,P+"BTN_SW",OBJPROP_TEXT,   swCompact ? "KEY TIME C" : "KEY TIME");
    ChartRedraw();
 }
@@ -1141,7 +1282,7 @@ void UpdateSessLvlButton()
 {
    if(ObjectFind(0,P+"BTN_SESSLVL")<0) return;
    bool slExp = (g_sessLvlOn && g_slMode == 1);   // v107 (FEAT-063)
-   ObjectSetInteger(0,P+"BTN_SESSLVL",OBJPROP_BGCOLOR, g_sessLvlOn ? (slExp ? C'0,110,170' : C'0,150,150') : C'70,70,80');
+   BtnBg(P+"BTN_SESSLVL", g_sessLvlOn ? (slExp ? TH_ACTIVE_ALT : TH_ACTIVE) : TH_BTN);
    ObjectSetString (0,P+"BTN_SESSLVL",OBJPROP_TEXT,   slExp ? "SESSION E" : "SESSION");
    ChartRedraw();
 }
@@ -1150,7 +1291,7 @@ void UpdateSessLvlButton()
 void UpdateMarkersButton()
 {
    if(ObjectFind(0,P+"BTN_MARKERS")<0) return;
-   ObjectSetInteger(0,P+"BTN_MARKERS",OBJPROP_BGCOLOR, g_markersOn?C'0,150,150':C'70,70,80');
+   BtnBg(P+"BTN_MARKERS", g_markersOn?TH_ACTIVE:TH_BTN);
    ObjectSetString (0,P+"BTN_MARKERS",OBJPROP_TEXT,   "MARKERS");
    ChartRedraw();
 }
@@ -1161,7 +1302,7 @@ void UpdateMarkersButton()
 void UpdateTagTradesButton()
 {
    if(ObjectFind(0,P+"BTN_TAGTRADES")<0) return;
-   ObjectSetInteger(0,P+"BTN_TAGTRADES",OBJPROP_BGCOLOR, g_tagWindowOpen?CLR_TOOLS_ACTIVE:CLR_BTN_DEFAULT);
+   BtnBg(P+"BTN_TAGTRADES", g_tagWindowOpen?CLR_TOOLS_ACTIVE:CLR_BTN_DEFAULT);
    ChartRedraw();
 }
 
@@ -1184,7 +1325,7 @@ void UpdateRiskDisplay()
    if(g_scaleInOn)
    {
       string riWhy; double riCap = ScaleInCapUSD(g_scaleInRoot, riWhy);
-      riClr = C'170,110,230';
+      riClr = TH_RISK_PURPLE;
       if(riCap > 0) riTxt = "Risk: "+FmtRiskPct(GetEntryRiskPct())+"% | Scale-in $"+DoubleToStr(riCap,2);
       else          riTxt = "Risk: - | Scale-in (no cap)";
    }
@@ -1203,6 +1344,11 @@ void UpdateRiskDisplay()
    // v28 (Change 3): the dedicated BG_OPEN background no longer exists (Open Risk now lives inside
    // the single merged BG_ALERT box) - the orange/green text color above already carries the same
    // near-limit warning, so no information is lost by dropping the separate background tint.
+   if(ObjectFind(0,P+"U_OPEN_V")>=0)   // v110 P4h: باکس آمار ۳ستونه‌ی Utility
+   {
+      SetLbl(P+"U_OPEN_V", DoubleToStr(tot,2)+"%", trc);
+      SetLbl(P+"U_RISK_V", FmtRiskPct(g_scaleInOn ? GetEntryRiskPct() : GetActiveRiskPct())+"%", riClr);
+   }
    if(trChanged) ChartRedraw();
 }
 
@@ -1217,7 +1363,7 @@ void UpdateRiskDisplay()
 void UpdatePLDisplay()
 {
    if(g_minimized) return;
-   if(g_dashboardMode==DASH_UTILITY) return;
+   if(g_dashboardMode!=DASH_REPORTS) return;  // v110 P2
    if(ObjectFind(0,P+"L_DPL")<0) return; // پنل هنوز در داشبورد Trading بازسازی نشده یا باکس Performance بسته‌ست
 
    double dpl = GetDailyNetResultPercent();
@@ -1279,13 +1425,13 @@ void UpdatePLDisplay()
 void UpdateReportsDisplay()
 {
    if(g_minimized) return;
-   if(g_dashboardMode==DASH_TRADING) return;
+   if(g_dashboardMode!=DASH_REPORTS) return;  // v110 P2
    if(ObjectFind(0,P+"L_REP_WINRATE")<0) return; // کشو بسته‌ست یا پنل هنوز بازسازی نشده
 
    // رنگ تب انتخاب‌شده
-   ObjectSetInteger(0,P+"BTN_REP_DAILY",  OBJPROP_BGCOLOR, (g_reportsPeriod==0) ? C'70,110,170' : C'55,55,62');
-   ObjectSetInteger(0,P+"BTN_REP_WEEKLY", OBJPROP_BGCOLOR, (g_reportsPeriod==1) ? C'70,110,170' : C'55,55,62');
-   ObjectSetInteger(0,P+"BTN_REP_MONTHLY",OBJPROP_BGCOLOR, (g_reportsPeriod==2) ? C'70,110,170' : C'55,55,62');
+   BtnBg(P+"BTN_REP_DAILY", (g_reportsPeriod==0) ? TH_SEL_BLUE : TH_BTN_DARK);
+   BtnBg(P+"BTN_REP_WEEKLY", (g_reportsPeriod==1) ? TH_SEL_BLUE : TH_BTN_DARK);
+   BtnBg(P+"BTN_REP_MONTHLY", (g_reportsPeriod==2) ? TH_SEL_BLUE : TH_BTN_DARK);
 
    datetime periodStart        = g_dayStart;
    double   periodStartBalance = g_dayStartBalance;  // v45 (Item 5): همون مبنای % که Daily/Weekly/Monthly DD ازش استفاده می‌کنن
@@ -1338,9 +1484,13 @@ void UpdateHalfRiskButton()
    if(g_riskStep == 1)      { bg = RISK_BG_HALF; bd = RISK_BORDER_HALF; }
    else if(g_riskStep == 2) { bg = RISK_BG_Q4;   bd = RISK_BORDER_Q4;   }
    else if(g_riskStep == 3) { bg = RISK_BG_Q8;   bd = RISK_BORDER_Q8;   }
+   bool rkLocked = (g_themeId==RM_THEME_MONO && !IsTradingAllowed());   // v110 P4d
+   if(g_themeId==RM_THEME_MONO) { bg = rkLocked ? TH_DIS_BG : TH_RISK_BG; bd = rkLocked ? TH_DIS_BG : TH_BTN_BD; }   // v110 P3
    string txt = "Risk: "+RiskStepName(g_riskStep);  // v99 (FEAT-045): فقط حالت (Full / 1/2 / 1/4 / 1/8)؛ درصد در L_RISKINFO
-   ObjectSetInteger(0,P+"BTN_RISKTOGGLE",OBJPROP_BGCOLOR,bg);
+   BtnBg(P+"BTN_RISKTOGGLE", bg);
    ObjectSetInteger(0,P+"BTN_RISKTOGGLE",OBJPROP_BORDER_COLOR,bd);
+   if(rkLocked) ObjectSetInteger(0,P+"BTN_RISKTOGGLE",OBJPROP_COLOR,TH_DIS_TXT);
+   RM_Flat(P+"BTN_RISKTOGGLE", rkLocked);
    ObjectSetString (0,P+"BTN_RISKTOGGLE",OBJPROP_TEXT,txt);
    FitBtnFontHalf(P+"BTN_RISKTOGGLE", txt, boxW);  // متن پله‌های کم‌ریسک بلندتره؛ فونت خودکار کوچک می‌شود
    UpdateRiskDisplay();  // v99 (FEAT-045): خط L_RISKINFO هم‌زمان با تغییر پله بروز شود (نه منتظر تیک بعدی)
@@ -1368,8 +1518,12 @@ void UpdateRRButton()
    ObjectSetString(0, P+"BTN_RR", OBJPROP_TEXT, RRLabelText());  // v45 (Punch List Round 3, Item 3)
    color rrBg, rrBorder;
    RRGlowColors(g_riskReward, rrBg, rrBorder);
-   ObjectSetInteger(0, P+"BTN_RR", OBJPROP_BGCOLOR, rrBg);
+   bool rrLocked = (g_themeId==RM_THEME_MONO && !IsTradingAllowed());   // v110 P4d
+   if(g_themeId==RM_THEME_MONO) { rrBg = rrLocked ? TH_DIS_BG : TH_RISK_BG; rrBorder = rrLocked ? TH_DIS_BG : TH_BTN_BD; }   // v110 P3
+   BtnBg(P+"BTN_RR", rrBg);
    ObjectSetInteger(0, P+"BTN_RR", OBJPROP_BORDER_COLOR, rrBorder);
+   if(rrLocked) ObjectSetInteger(0, P+"BTN_RR", OBJPROP_COLOR, TH_DIS_TXT);
+   RM_Flat(P+"BTN_RR", rrLocked);
    ChartRedraw();
 
    // اگه خط TP از قبل روی چارت تنظیم شده، با RR جدید بازمحاسبه‌اش کن
@@ -1387,21 +1541,22 @@ void UpdateScaleInButton()
 {
    if(ObjectFind(0,P+"BTN_SCALEIN") < 0) return;
    bool locked = !IsTradingAllowed();
-   color bg  = C'55,55,62';
-   color bd  = C'55,55,62';
-   color txt = clrWhite;
+   color bg  = TH_BTN_DARK;
+   color bd  = TH_BTN_DARK;
+   color txt = TH_WHITE;
    string t  = "Scale-in: OFF";
    if(g_scaleInOn)
    {
-      bg = C'120,70,175'; bd = C'165,115,225'; t = "Scale-in: ON";
+      bg = TH_SCALEIN_BG; bd = TH_SCALEIN_BD; t = "Scale-in: ON";
    }
    else if(locked)
    {
-      bg = C'40,40,45'; bd = C'40,40,45'; txt = C'110,110,115';
+      bg = TH_DIS_BG; bd = TH_DIS_BG; txt = TH_DIS_TXT2;
    }
-   ObjectSetInteger(0,P+"BTN_SCALEIN",OBJPROP_BGCOLOR,bg);
+   BtnBg(P+"BTN_SCALEIN", bg);
    ObjectSetInteger(0,P+"BTN_SCALEIN",OBJPROP_BORDER_COLOR,bd);
    ObjectSetInteger(0,P+"BTN_SCALEIN",OBJPROP_COLOR,txt);
+   RM_Flat(P+"BTN_SCALEIN", (!g_scaleInOn && locked));   // v110 P4d
    ObjectSetString (0,P+"BTN_SCALEIN",OBJPROP_TEXT,t);
    UpdateRiskDisplay();  // v99 (FEAT-045): خط L_RISKINFO با روشن/خاموش شدن Scale-in هماهنگ شود
 }
@@ -1411,34 +1566,48 @@ void UpdateModeButtons()
    UpdateScaleInButton();   // v90 (FEAT-044): هم‌زمان با قفل/باز شدن Market/Pending رنگ دکمه هم هماهنگ می‌شود
    bool locked = !IsTradingAllowed();
    int corner = PanelRight ? CORNER_RIGHT_UPPER : CORNER_LEFT_UPPER;
+   // v110 P4d: با قفل/بازشدن معاملات، Risk و RR هم تخت/برجسته شوند (فقط تم Mono، فقط هنگام تغییر وضعیت)
+   static int lastLk = -1;
+   if(g_themeId==RM_THEME_MONO && lastLk != (locked?1:0))
+   {
+      lastLk = locked?1:0;
+      if(ObjectFind(0,P+"BTN_RISKTOGGLE")>=0) { UpdateHalfRiskButton(); UpdateRRButton(); }
+   }
 
    if(locked)
    {
-      ObjectSetInteger(0,P+"BTN_MARKET",  OBJPROP_BGCOLOR, C'40,40,45');
-      ObjectSetInteger(0,P+"BTN_PENDING", OBJPROP_BGCOLOR, C'40,40,45');
+      BtnBg(P+"BTN_MARKET", TH_DIS_BG);
+      BtnBg(P+"BTN_PENDING", TH_DIS_BG);
+      RM_Flat(P+"BTN_MARKET", true); RM_Flat(P+"BTN_PENDING", true);   // v110 P4d
       // v28 revision: MARKET/PENDING labels moved off the button caption (Change 4) onto separate
       // overlay label objects - color them here instead of the (now always-empty) button text.
-      ObjectSetInteger(0,P+"L_MKT1", OBJPROP_COLOR, C'80,80,85');
-      ObjectSetInteger(0,P+"L_MKT2", OBJPROP_COLOR, C'80,80,85');
-      ObjectSetInteger(0,P+"L_PND1", OBJPROP_COLOR, C'80,80,85');
-      ObjectSetInteger(0,P+"L_PND2", OBJPROP_COLOR, C'80,80,85');
+      ObjectSetInteger(0,P+"L_MKT1", OBJPROP_COLOR, TH_DIS_TXT);
+      ObjectSetInteger(0,P+"L_MKT2", OBJPROP_COLOR, TH_DIS_TXT);
+      ObjectSetInteger(0,P+"L_PND1", OBJPROP_COLOR, TH_DIS_TXT);
+      ObjectSetInteger(0,P+"L_PND2", OBJPROP_COLOR, TH_DIS_TXT);
       return;
    }
 
    // v29 revision 2 (Mahmoud feedback): reset color updated to MP_BASE_GREY to match the new
    // lighter base set in BuildPanel() - Market/Pending stay visually "brighter" than the rest of
    // the panel's grey controls even while inactive/unselected.
-   ObjectSetInteger(0,P+"BTN_MARKET",  OBJPROP_BGCOLOR, MP_BASE_GREY);
-   ObjectSetInteger(0,P+"BTN_PENDING", OBJPROP_BGCOLOR, MP_BASE_GREY);
-   ObjectSetInteger(0,P+"L_MKT1", OBJPROP_COLOR, clrWhite);
-   ObjectSetInteger(0,P+"L_MKT2", OBJPROP_COLOR, clrWhite);
-   ObjectSetInteger(0,P+"L_PND1", OBJPROP_COLOR, clrWhite);
-   ObjectSetInteger(0,P+"L_PND2", OBJPROP_COLOR, clrWhite);
+   BtnBg(P+"BTN_MARKET", MP_BASE_GREY);
+   BtnBg(P+"BTN_PENDING", MP_BASE_GREY);
+   RM_Flat(P+"BTN_MARKET", false); RM_Flat(P+"BTN_PENDING", false);   // v110 P4d
+   ObjectSetInteger(0,P+"L_MKT1", OBJPROP_COLOR, TH_WHITE);
+   ObjectSetInteger(0,P+"L_MKT2", OBJPROP_COLOR, TH_WHITE);
+   ObjectSetInteger(0,P+"L_PND1", OBJPROP_COLOR, TH_WHITE);
+   ObjectSetInteger(0,P+"L_PND2", OBJPROP_COLOR, TH_WHITE);
 
    if(g_step != STEP_IDLE)
    {
-      if(g_mode==MODE_MARKET)  ObjectSetInteger(0,P+"BTN_MARKET",  OBJPROP_BGCOLOR, C'30,130,220');
-      if(g_mode==MODE_PENDING) ObjectSetInteger(0,P+"BTN_PENDING", OBJPROP_BGCOLOR, C'190,140,0');
+      if(g_mode==MODE_MARKET)  BtnBg(P+"BTN_MARKET", TH_MARKET);
+      if(g_mode==MODE_PENDING) BtnBg(P+"BTN_PENDING", TH_PENDING);
+      if(g_themeId==RM_THEME_MONO)   // v110 P3: متن سفید روی تیل انتخاب‌شده
+      {
+         if(g_mode==MODE_MARKET)  { ObjectSetInteger(0,P+"L_MKT1",OBJPROP_COLOR,clrWhite); ObjectSetInteger(0,P+"L_MKT2",OBJPROP_COLOR,clrWhite); }
+         if(g_mode==MODE_PENDING) { ObjectSetInteger(0,P+"L_PND1",OBJPROP_COLOR,clrWhite); ObjectSetInteger(0,P+"L_PND2",OBJPROP_COLOR,clrWhite); }
+      }
    }
 }
 
@@ -1482,15 +1651,13 @@ void FitBoxFontBig(string objName, string txt)
 // panel's manual layout math already leans on elsewhere) against the box's actual pixel width and
 // picks the largest size that clears it, falling back to the existing 6-floor if none do - same
 // "shrink font dynamically" spirit as FitBoxFont()/FitBoxFontBig(), just box-width-aware.
-void FitBoxFontHalf(string objName, string txt, int boxW)
+void FitBoxFontHalf(string objName, string txt, int boxW, int maxSz=10)
 {
-   int sizes[5] = {10,9,8,7,6};
    int pad = SC(8);  // left/right breathing room inside the box
    int avail = boxW - pad;
    int chosen = 6;
-   for(int i=0;i<5;i++)
+   for(int sz=maxSz; sz>=6; sz--)
    {
-      int sz = sizes[i];
       int estW = (int)(StringLen(txt) * SCF(sz) * 0.62);
       chosen = sz;
       if(estW <= avail) break;
@@ -1533,7 +1700,7 @@ void FitBtnFontHalf(string objName, string txt, int boxW, int maxSz=8)
 
 
 void SetLbl(string n,string t,color c)
-{ ObjectSetString(0,n,OBJPROP_TEXT,t); ObjectSetInteger(0,n,OBJPROP_COLOR,c); }
+{ ObjectSetString(0,n,OBJPROP_TEXT,t); ObjectSetInteger(0,n,OBJPROP_COLOR,RM_Txt(c)); }
 
 
 void ResetLines()
@@ -1577,14 +1744,62 @@ void LblCC(string n,int bx,int by,int bw,int bh,string t,color c,int sz=7,bool b
 }
 
 
+// v110 P3: لومیناس رنگ + رنگ متن مناسب پس‌زمینه (فقط تم Mono: روی پس‌زمینه‌ی تیره متن سفید، روی روشن متن تیره)
+int RM_Lum(color c)
+{
+   int r=(int)(c & 0xFF), g=(int)((c>>8)&0xFF), b=(int)((c>>16)&0xFF);
+   return (r*299+g*587+b*114)/1000;
+}
+color RM_BtnTxt(color bg)
+{
+   if(g_themeId==RM_THEME_CLASSIC) return TH_WHITE;
+   return (RM_Lum(bg) < 140) ? (color)clrWhite : TH_WHITE;
+}
+// متن‌های روشن (سبز/نارنجی/آبی لایم و ...) روی زمینه‌ی روشن خوانا نیستند → در تم Mono تیره می‌شوند
+color RM_Txt(color c)
+{
+   if(g_themeId==RM_THEME_CLASSIC) return c;
+   int r=(int)(c & 0xFF), g=(int)((c>>8)&0xFF), b=(int)((c>>16)&0xFF);
+   if(RM_Lum(c) <= 110) return c;
+   return (color)(((int)(r*0.55)) | (((int)(g*0.55))<<8) | (((int)(b*0.55))<<16));
+}
+// v110 P4d: حالت غیرفعال = تخت (بدون برجستگی) - فقط تم Mono
+// v110 P4f/P4h: زمینه‌ی پنجره‌های شناور - هم‌عرض پنل اصلی (بدون بزرگ‌کردن)؛ دکمه‌ها داخلش با فاصله‌ی SC(6) از لبه (inset)
+void RectWin(string n,int x,int y,int w,int h,int corner)
+{
+   RectC(n, x, y, w, h, TH_WIN_BG, corner);
+}
+int RM_WinInset() { return (g_themeId==RM_THEME_MONO) ? SC(6) : 0; }
+
+// v110 P4d: حالت غیرفعال = تخت (بدون برجستگی) - فقط تم Mono
+void RM_Flat(string n, bool flat)
+{
+   if(g_themeId!=RM_THEME_MONO) return;
+   if(ObjectFind(0,n+"_SH")>=0) ObjectSetInteger(0,n+"_SH",OBJPROP_BGCOLOR, flat ? TH_DIS_BG : TH_BEVEL_SH);
+   ObjectSetInteger(0,n,OBJPROP_BORDER_COLOR, flat ? TH_DIS_BG : TH_BEVEL_LT);
+}
+void BtnBg(string n, color bg)
+{
+   ObjectSetInteger(0,n,OBJPROP_BGCOLOR,bg);
+   if(g_themeId!=RM_THEME_CLASSIC) ObjectSetInteger(0,n,OBJPROP_COLOR,RM_BtnTxt(bg));
+}
+
 void BtnC(string n,int x,int y,int w,int h,string t,color bg,int corner=CORNER_LEFT_UPPER,int sz=7)
 {
+   // v110 P3: برجستگی - زیرلایه‌ی استاتیک (سایه ۱ پیکسل پایین/راست) + بوردر روشن بالا/چپ
+   int bw = w, bh = h;
+   if(g_themeId==RM_THEME_MONO)
+   {
+      RectC(n+"_SH", x, y, w, h, TH_BEVEL_SH, corner);   // v110 P4e: سایه داخل کادر دکمه می‌ماند (بیرون نمی‌زند)
+      bw = w-1; bh = h-2;
+   }
    ObjectCreate(0,n,OBJ_BUTTON,0,0,0);
    ObjectSetInteger(0,n,OBJPROP_XDISTANCE,x); ObjectSetInteger(0,n,OBJPROP_YDISTANCE,y);
-   ObjectSetInteger(0,n,OBJPROP_XSIZE,w);     ObjectSetInteger(0,n,OBJPROP_YSIZE,h);
+   ObjectSetInteger(0,n,OBJPROP_XSIZE,bw);     ObjectSetInteger(0,n,OBJPROP_YSIZE,bh);
    ObjectSetString(0,n,OBJPROP_TEXT,t);        ObjectSetInteger(0,n,OBJPROP_BGCOLOR,bg);
-   ObjectSetInteger(0,n,OBJPROP_COLOR,clrWhite); ObjectSetInteger(0,n,OBJPROP_FONTSIZE,SCF(sz));  // v32: scaled
+   ObjectSetInteger(0,n,OBJPROP_COLOR,RM_BtnTxt(bg)); ObjectSetInteger(0,n,OBJPROP_FONTSIZE,SCF(sz));  // v32: scaled
    ObjectSetInteger(0,n,OBJPROP_CORNER,corner);
+   if(g_themeId==RM_THEME_MONO) ObjectSetInteger(0,n,OBJPROP_BORDER_COLOR,TH_BEVEL_LT);   // v110 P3
    ObjectSetInteger(0,n,OBJPROP_SELECTABLE,false);
    // v36 (Change 3): همه‌ی دکمه‌های پنل حالا Bold هستن برای خوانایی بهتر - یه تغییر اینجا کافیه،
    // چون همه‌ی ۳۴ دکمه‌ی پنل از همین تابع مشترک ساخته می‌شن (نیازی به دست زدن تک‌تک محل صداشون نیست).

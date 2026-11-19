@@ -962,10 +962,10 @@ void OpenFullCloseMenu()
    // v45 (Punch List Round 3, Item 2): all 4 captions unified to ALL CAPS (CLOSE WINNERS/CLOSE
    // LOSERS were already caps since v36 - "Close All"/"Close Chart" now match instead of the
    // mixed Title Case they had).
-   BtnC(P+"SUB_CLOSEALL",    mx0, my0, mwL, mh, "CLOSE ALL",    C'170,45,45', corner, 8);
-   BtnC(P+"SUB_CLOSECHART",  mx1, my0, mwR, mh, "CLOSE CHART",  C'150,95,35', corner, 8);
-   BtnC(P+"SUB_CLOSEPROFIT", mx0, my1, mwL, mh, "CLOSE WINNERS", C'40,130,60', corner, 8);
-   BtnC(P+"SUB_CLOSELOSS",   mx1, my1, mwR, mh, "CLOSE LOSERS",  C'150,45,45', corner, 8);
+   BtnC(P+"SUB_CLOSEALL",    mx0, my0, mwL, mh, "CLOSE ALL",    TH_CL_ALL, corner, 8);
+   BtnC(P+"SUB_CLOSECHART",  mx1, my0, mwR, mh, "CLOSE CHART",  TH_CL_CHART, corner, 8);
+   BtnC(P+"SUB_CLOSEPROFIT", mx0, my1, mwL, mh, "CLOSE WINNERS", TH_CL_WIN, corner, 8);
+   BtnC(P+"SUB_CLOSELOSS",   mx1, my1, mwR, mh, "CLOSE LOSERS",  TH_CL_LOSS, corner, 8);
 
    // v45 (Punch List Round 3, Item 1): same width-aware font-fit class already used for
    // BTN_RISKTOGGLE (v44) - previously only BtnC's static sz=8 applied here, so "CLOSE WINNERS"
@@ -982,9 +982,16 @@ void OpenFullCloseMenu()
    // introducing a new, untested size. Guarantees both buttons render at the exact same size (the
    // original ask) and removes the estimation step - and its risk of being wrong a third time -
    // entirely for this specific pair.
-   FitBtnFontHalf(P+"SUB_CLOSEPROFIT", "CLOSE WINNERS", mwL, 6);
-   FitBtnFontHalf(P+"SUB_CLOSELOSS",   "CLOSE LOSERS",  mwR, 6);
-
+   int clFs = (g_themeId==RM_THEME_MONO) ? 7 : 6;   // v110 P4: در تم Mono هر چهار دکمه هم‌اندازه (۷)
+   FitBtnFontHalf(P+"SUB_CLOSEPROFIT", "CLOSE WINNERS", mwL, clFs);
+   FitBtnFontHalf(P+"SUB_CLOSELOSS",   "CLOSE LOSERS",  mwR, clFs);
+   if(g_themeId==RM_THEME_MONO)
+   {
+      ObjectSetInteger(0,P+"SUB_CLOSEALL",OBJPROP_FONTSIZE,SCF(7)); ObjectSetInteger(0,P+"SUB_CLOSECHART",OBJPROP_FONTSIZE,SCF(7));
+      FitBtnFontHalf(P+"SUB_CLOSEALL","CLOSE ALL",mwL,7); FitBtnFontHalf(P+"SUB_CLOSECHART","CLOSE CHART",mwR,7);
+      BtnBg(P+"BTN_FULL", TH_ACTIVE);   // BULK CLOSE تیل = منو باز است؛ بقیه‌ی پنل خاکستری نمی‌شود
+   }
+   else
    GreyOutPanel("BTN_FULL");
    ChartRedraw();
 }
@@ -1028,8 +1035,8 @@ void OpenHalfCloseMenu()
    int mx1 = g_halfCloseMenuAnchorX + mw + CLOSE_GRID_GAP;
    int my0 = g_halfCloseMenuAnchorY;
 
-   BtnC(P+"SUB_HALFALL",    mx0, my0, mw, mh, "Half Close All", C'150,95,35', corner, 8);
-   BtnC(P+"SUB_HALFPROFIT", mx1, my0, mw, mh, "Profitable Only", C'40,130,60', corner, 8);
+   BtnC(P+"SUB_HALFALL",    mx0, my0, mw, mh, "Half Close All", TH_CL_CHART, corner, 8);
+   BtnC(P+"SUB_HALFPROFIT", mx1, my0, mw, mh, "Profitable Only", TH_CL_WIN, corner, 8);
 
    // v59 (Item 1 - Trade Identification): وقتی ۲ یا بیشتر معامله روی همین نماد باز باشه، یه ردیف
    // سوم زیر همون دو دکمه‌ی قبلی (تمام‌عرض، مثل ردیف‌های BuildTagWindow) اضافه می‌شه - انتخاب یک
@@ -1038,10 +1045,10 @@ void OpenHalfCloseMenu()
    if(CountSymbolOpenTickets()>=2)
    {
       int my1 = my0 + mh + CLOSE_GRID_GAP;
-      BtnC(P+"SUB_HALFSELECT", mx0, my1, g_halfCloseMenuAnchorW, mh, "Select Trade", C'70,90,120', corner, 8);
+      BtnC(P+"SUB_HALFSELECT", mx0, my1, g_halfCloseMenuAnchorW, mh, "Select Trade", TH_CL_SEL, corner, 8);
    }
 
-   GreyOutPanel("BTN_HALF");
+   if(g_themeId!=RM_THEME_MONO) GreyOutPanel("BTN_HALF");   // v110 P4: در تم Mono پنل خاکستری نمی‌شود
    ChartRedraw();
 }
 
@@ -1157,22 +1164,23 @@ void BuildHalfSelectWindow()
    int contentRows = (cnt>0) ? cnt : 1;  // حداقل ۱ ردیف برای پیام "بدون معامله"
    int totalH = pad + hdrH + pad + contentRows*(rowH+pad) + pad;
 
-   RectC(HALFSEL_WIN_PREFIX+"BG", winX, winY, winW, totalH, C'25,25,32', corner);
+   RectWin(HALFSEL_WIN_PREFIX+"BG", winX, winY, winW, totalH, corner);
+   winX += RM_WinInset(); winW -= 2*RM_WinInset();   // v110 P4h
 
    int cy = winY + pad;
-   BtnC(HALFSEL_WIN_PREFIX+"HDR",   winX,             cy, winW-SC(24)-pad, hdrH, "Half Close - Select Trade", C'50,54,68', corner, 7);
-   BtnC(HALFSEL_WIN_PREFIX+"CLOSE", winX+winW-SC(24), cy, SC(24),          hdrH, "X",     C'120,40,40', corner, 8);
+   BtnC(HALFSEL_WIN_PREFIX+"HDR",   winX,             cy, winW-SC(24)-pad, hdrH, "Half Close - Select Trade", TH_HDR, corner, 7);
+   BtnC(HALFSEL_WIN_PREFIX+"CLOSE", winX+winW-SC(24), cy, SC(24),          hdrH, "X",     TH_XBTN, corner, 8);
    cy += hdrH + pad;
 
    if(cnt==0)
    {
-      LblCC(HALFSEL_WIN_PREFIX+"EMPTY", winX, cy, winW, rowH, "No open trades", clrSilver, 7, false, corner);
+      LblCC(HALFSEL_WIN_PREFIX+"EMPTY", winX, cy, winW, rowH, "No open trades", TH_SILVER, 7, false, corner);
    }
    else
    {
       for(int r=0;r<cnt;r++)
       {
-         BtnC(HALFSEL_WIN_PREFIX+"ROW_"+IntegerToString(r), winX, cy, winW, rowH, labels[r], C'60,60,70', corner, 7);
+         BtnC(HALFSEL_WIN_PREFIX+"ROW_"+IntegerToString(r), winX, cy, winW, rowH, labels[r], TH_ROW, corner, 7);
          cy += rowH + pad;
       }
    }

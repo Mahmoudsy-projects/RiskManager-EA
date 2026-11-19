@@ -210,15 +210,36 @@ int HubLabelFontSize(string t)
    int n = StringLen(t);
    int w = (g_effBtnWidth > 0) ? g_effBtnWidth : 52;
    double avail = (double)(w - 6);
-   int fs = 7;
-   while(fs > 5 && (double)n * 0.9 * (double)fs > avail) fs--;
+   int fs = 8;   // v1.17: 7 -> 8
+   while(fs > 6 && (double)n * 0.9 * (double)fs > avail) fs--;
    return(fs);
 }
 
 #define BTN_MASTER_INDICATOR PFX+"Btn_MasterIndicator"
 
-#define CLR_SUBTOGGLE_ACTIVE C'0,150,150'
-#define CLR_INACTIVE_GRAY C'70,70,80'
+//--- v1.23: New Graphic Design (Theme D "Mono Gray") - appearance only. HubDesign=CLASSIC keeps the old dark look exactly.
+enum EHubDesign { HUB_DESIGN_CLASSIC = 0, HUB_DESIGN_MONO = 1 };
+input EHubDesign HubDesign = HUB_DESIGN_MONO;   // Hub look: Mono Gray (new) / Classic dark (old)
+bool HubMono() { return(HubDesign == HUB_DESIGN_MONO); }
+color HubClrActive()   { return(HubMono() ? (color)C'14,124,134'  : (color)C'0,150,150'); }
+color HubClrInactive() { return(HubMono() ? (color)C'242,242,242' : (color)C'70,70,80'); }
+color HubClrMaster()   { return(HubMono() ? (color)C'14,124,134'  : clrSeaGreen); }
+color HubBgNow()       { return(HubMono() ? (color)C'228,228,228' : HubBgColor); }
+color HubBorderNow()   { return(HubMono() ? (color)C'176,176,176' : HubBorderColor); }
+#define CLR_SUBTOGGLE_ACTIVE HubClrActive()
+#define CLR_INACTIVE_GRAY HubClrInactive()
+//--- text colour for a toggle/tab button: white on dark/teal, dark on the light Mono buttons
+color HubBtnTxt(color bg) { return(HubMono() && bg == HubClrInactive() ? (color)C'26,26,26' : clrWhite); }
+//--- set background + matching text + thin outline in one place (Classic: identical to the old behaviour)
+void HubSetBg(string nm, color bg)
+{
+   ObjectSetInteger(0, nm, OBJPROP_BGCOLOR, bg);
+   //--- v1.17: font is set only when it differs - re-setting OBJPROP_FONT on every colour refresh made buttons flicker
+   if(ObjectGetString(0, nm, OBJPROP_FONT) != "Segoe UI Bold") ObjectSetString(0, nm, OBJPROP_FONT, "Segoe UI Bold");
+   if(!HubMono()) return;
+   ObjectSetInteger(0, nm, OBJPROP_COLOR, HubBtnTxt(bg));
+   ObjectSetInteger(0, nm, OBJPROP_BORDER_COLOR, (color)C'255,255,255');
+}
 #define HUB_BG_NAME    PFX+"HubBg"
 
 //--- v1.12 (MT4 v1.17 FEAT-052): دکمه‌ی مادر چهارم «Theme» + کشوی ۷ تم رنگی چارت + «Original».
@@ -390,6 +411,7 @@ bool IsHubPanelOwnedObject(string name)
 void RaiseHubPanelToFront()
 {
    ObjectDelete(0, HUB_BG_NAME);
+   HubDeleteShadows();   // v1.17
    ObjectDelete(0, BTN_MASTER_DRAW);
    ObjectDelete(0, BTN_MASTER_LABELS);
    ObjectDelete(0, BTN_MASTER_INDICATOR);
@@ -453,7 +475,7 @@ void CreateButtons()
    CreateOneButton(BTN_PATH2, "Path 2", gPath2Color);   // v1.14
    CreateOneButton(BTN_LINE2, "Line 2", gLine2Color);   // v1.14
    CreateOneButton(BTN_HLINE, "Horizontal Line", gHRayColor);   // v1.10
-   ObjectSetInteger(0, BTN_HLINE, OBJPROP_FONTSIZE, 6);         // متن بلندتر؛ با فونت ۷ روی عرض‌های کوچک‌شده بیرون می‌زند
+   ObjectSetInteger(0, BTN_HLINE, OBJPROP_FONTSIZE, 7);         // متن بلندتر؛ با فونت ۷ روی عرض‌های کوچک‌شده بیرون می‌زند
    CreateOneButton(BTN_DASH, "Dash Line", gDashColor);          // v1.10
    CreateOneButton(BTN_MEASURE, "RANGE", CLR_INACTIVE_GRAY);    // v1.11: توگل‌مانند (خاکستری=غیرفعال / فیروزه‌ای=مسلح)
    HighlightActiveButton(drawMode); // اول کم‌رنگ کردن همه (drawMode اولش MODE_NONE هست)
@@ -479,9 +501,9 @@ void CreateButtons()
       ObjectSetInteger(0, BTN_MASTER_DRAW, OBJPROP_CORNER, CORNER_LEFT_UPPER);
       ObjectSetInteger(0, BTN_MASTER_DRAW, OBJPROP_XSIZE, g_effMasterBtnWidth);
       ObjectSetInteger(0, BTN_MASTER_DRAW, OBJPROP_YSIZE, BtnHeight);
-      ObjectSetInteger(0, BTN_MASTER_DRAW, OBJPROP_FONTSIZE, 7);
+      ObjectSetInteger(0, BTN_MASTER_DRAW, OBJPROP_FONTSIZE, 8);   // v1.17: 7 -> 8 (MT5 renders 7pt pixelated)
       ObjectSetInteger(0, BTN_MASTER_DRAW, OBJPROP_COLOR, clrWhite);
-      ObjectSetInteger(0, BTN_MASTER_DRAW, OBJPROP_BGCOLOR, clrSeaGreen);
+      HubSetBg(BTN_MASTER_DRAW, HubClrMaster());
       ObjectSetInteger(0, BTN_MASTER_DRAW, OBJPROP_SELECTABLE, false);
       ObjectSetInteger(0, BTN_MASTER_DRAW, OBJPROP_HIDDEN, true);
       ObjectSetInteger(0, BTN_MASTER_DRAW, OBJPROP_ZORDER, PANEL_ZORDER_FG);
@@ -493,9 +515,9 @@ void CreateButtons()
       ObjectSetInteger(0, BTN_MASTER_LABELS, OBJPROP_CORNER, CORNER_LEFT_UPPER);
       ObjectSetInteger(0, BTN_MASTER_LABELS, OBJPROP_XSIZE, g_effMasterBtnWidth);
       ObjectSetInteger(0, BTN_MASTER_LABELS, OBJPROP_YSIZE, BtnHeight);
-      ObjectSetInteger(0, BTN_MASTER_LABELS, OBJPROP_FONTSIZE, 7);
+      ObjectSetInteger(0, BTN_MASTER_LABELS, OBJPROP_FONTSIZE, 8);   // v1.17: 7 -> 8 (MT5 renders 7pt pixelated)
       ObjectSetInteger(0, BTN_MASTER_LABELS, OBJPROP_COLOR, clrWhite);
-      ObjectSetInteger(0, BTN_MASTER_LABELS, OBJPROP_BGCOLOR, clrSeaGreen);
+      HubSetBg(BTN_MASTER_LABELS, HubClrMaster());
       ObjectSetInteger(0, BTN_MASTER_LABELS, OBJPROP_SELECTABLE, false);
       ObjectSetInteger(0, BTN_MASTER_LABELS, OBJPROP_HIDDEN, true);
       ObjectSetInteger(0, BTN_MASTER_LABELS, OBJPROP_ZORDER, PANEL_ZORDER_FG);
@@ -507,9 +529,9 @@ void CreateButtons()
       ObjectSetInteger(0, BTN_MASTER_INDICATOR, OBJPROP_CORNER, CORNER_LEFT_UPPER);
       ObjectSetInteger(0, BTN_MASTER_INDICATOR, OBJPROP_XSIZE, g_effMasterBtnWidth);
       ObjectSetInteger(0, BTN_MASTER_INDICATOR, OBJPROP_YSIZE, BtnHeight);
-      ObjectSetInteger(0, BTN_MASTER_INDICATOR, OBJPROP_FONTSIZE, 7);
+      ObjectSetInteger(0, BTN_MASTER_INDICATOR, OBJPROP_FONTSIZE, 8);   // v1.17: 7 -> 8 (MT5 renders 7pt pixelated)
       ObjectSetInteger(0, BTN_MASTER_INDICATOR, OBJPROP_COLOR, clrWhite);
-      ObjectSetInteger(0, BTN_MASTER_INDICATOR, OBJPROP_BGCOLOR, clrSeaGreen);
+      HubSetBg(BTN_MASTER_INDICATOR, HubClrMaster());
       ObjectSetInteger(0, BTN_MASTER_INDICATOR, OBJPROP_SELECTABLE, false);
       ObjectSetInteger(0, BTN_MASTER_INDICATOR, OBJPROP_HIDDEN, true);
       ObjectSetInteger(0, BTN_MASTER_INDICATOR, OBJPROP_ZORDER, PANEL_ZORDER_FG);
@@ -528,7 +550,8 @@ void ApplyDrawMinimizedState()
       ObjectSetInteger(0, names[i], OBJPROP_TIMEFRAMES, tf);
    ObjectSetInteger(0, BTN_MEASURE, OBJPROP_TIMEFRAMES, tf);   // v1.11: بیرون آرایه‌ی گرید ولی همان show/hide
    ObjectSetString(0, BTN_MASTER_DRAW, OBJPROP_TEXT, gDrawMinimized ? "Draw +" : "Draw −");
-   ObjectSetInteger(0, BTN_MASTER_DRAW, OBJPROP_BGCOLOR, gDrawMinimized ? CLR_INACTIVE_GRAY : clrSeaGreen);
+   HubSetBg(BTN_MASTER_DRAW, gDrawMinimized ? CLR_INACTIVE_GRAY : HubClrMaster());
+   HubSyncShadows();   // v1.17
    //--- BUG-FIX (v1.07, lag): UpdateHubBackground()+ChartRedraw() removed
    //--- from here - every caller of this function already calls
    //--- PositionButtons() (which itself calls UpdateHubBackground()) around
@@ -548,15 +571,15 @@ void CreateOneButton(string name, string text, color bg)
       ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
       ObjectSetInteger(0, name, OBJPROP_XSIZE, g_effBtnWidth);
       ObjectSetInteger(0, name, OBJPROP_YSIZE, BtnHeight);
-      ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 7);
+      ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 8);   // v1.17: 7 -> 8
       ObjectSetString(0, name, OBJPROP_TEXT, text);
       ObjectSetInteger(0, name, OBJPROP_COLOR, clrWhite);
-      ObjectSetString(0, name, OBJPROP_FONT, "Arial Bold");
+      ObjectSetString(0, name, OBJPROP_FONT, "Segoe UI Bold");
       ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
       ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
       ObjectSetInteger(0, name, OBJPROP_ZORDER, PANEL_ZORDER_FG);
    }
-   ObjectSetInteger(0, name, OBJPROP_BGCOLOR, bg);
+   HubSetBg(name, bg);
 }
 
 void PositionButtons()
@@ -831,6 +854,68 @@ void RecomputeEffectiveSizes()
 //| ردیف‌ها بود، پس تمیز درنمی‌اومد). ارتفاعش پویاست: بسته به اینکه کدوم    |
 //| کشو (اگه کدوم) بازه، کوتاه یا بلندتر می‌شه.                            |
 //+------------------------------------------------------------------+
+//--- v1.23: raised-button look (Mono). One static 1-2px dark underlay per button, created right after the panel
+//--- background (so it sits UNDER the buttons) and re-synced (position/size/visibility) only when the layout is
+//--- recomputed - no per-tick work. Classic design: nothing is created.
+int HubAllButtons(string &a[])
+{
+   string t[TOOL_COUNT_ITEMS] = {BTN_FA, BTN_FB, BTN_FC, BTN_FD, BTN_HA, BTN_HB, BTN_PATH, BTN_LINE, BTN_PATH2, BTN_LINE2, BTN_HLINE, BTN_DASH};
+   int n = 0;
+   ArrayResize(a, TOOL_COUNT_ITEMS + 5 + THEME_COUNT + 3 + LABEL_COUNT + 9);
+   for(int i = 0; i < TOOL_COUNT_ITEMS; i++) a[n++] = t[i];
+   a[n++] = BTN_MEASURE; a[n++] = BTN_MASTER_DRAW; a[n++] = BTN_MASTER_LABELS; a[n++] = BTN_MASTER_INDICATOR; a[n++] = BTN_MASTER_THEME;
+   for(int i = 0; i < THEME_COUNT; i++) a[n++] = Theme_BtnName(i);
+   a[n++] = BTN_THEME_CUSTOM; a[n++] = BTN_THEME_CSAVE; a[n++] = BTN_THEME_CRESET;
+   for(int i = 0; i < LABEL_COUNT; i++) a[n++] = LabelButtonName(i);
+   a[n++] = BTN_POC; a[n++] = BTN_WMAP; a[n++] = BTN_SOB; a[n++] = BTN_NYE; a[n++] = BTN_MTFCP;
+   a[n++] = BTN_EMA10; a[n++] = BTN_EMA20; a[n++] = BTN_EMA60; a[n++] = BTN_EMA240;
+   return(n);
+}
+
+void HubDeleteShadows()
+{
+   string a[]; int n = HubAllButtons(a);
+   for(int i = 0; i < n; i++) ObjectDelete(0, a[i] + "_SH");
+}
+
+void HubSyncShadows()
+{
+   if(!HubMono()) return;
+   string a[]; int n = HubAllButtons(a);
+   int ex = (g_effBtnGap >= 3) ? 2 : 1;
+   for(int i = 0; i < n; i++)
+   {
+      string sh = a[i] + "_SH";
+      if(ObjectFind(0, sh) < 0)
+      {
+         ObjectCreate(0, sh, OBJ_RECTANGLE_LABEL, 0, 0, 0);
+         ObjectSetInteger(0, sh, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+         ObjectSetInteger(0, sh, OBJPROP_BACK, false);
+         ObjectSetInteger(0, sh, OBJPROP_SELECTABLE, false);
+         ObjectSetInteger(0, sh, OBJPROP_HIDDEN, true);
+         ObjectSetInteger(0, sh, OBJPROP_BORDER_TYPE, BORDER_FLAT);
+         ObjectSetInteger(0, sh, OBJPROP_BGCOLOR, (color)C'122,122,122');
+         ObjectSetInteger(0, sh, OBJPROP_COLOR, (color)C'122,122,122');
+         ObjectSetInteger(0, sh, OBJPROP_ZORDER, PANEL_ZORDER_BG);
+         ObjectSetInteger(0, sh, OBJPROP_XDISTANCE, -3000);   // parked off-screen until its button is visible
+         ObjectSetInteger(0, sh, OBJPROP_YDISTANCE, 0);
+         ObjectSetInteger(0, sh, OBJPROP_XSIZE, 1);
+         ObjectSetInteger(0, sh, OBJPROP_YSIZE, 1);
+      }
+      //--- NEVER touch the shadow's OBJPROP_TIMEFRAMES: flipping it re-orders the object on top of the buttons.
+      //--- Hidden buttons (minimized tab) -> the shadow is simply parked off-screen.
+      if(ObjectFind(0, a[i]) < 0 || ObjectGetInteger(0, a[i], OBJPROP_TIMEFRAMES) == OBJ_NO_PERIODS)
+      {
+         ObjectSetInteger(0, sh, OBJPROP_XDISTANCE, -3000);
+         continue;
+      }
+      ObjectSetInteger(0, sh, OBJPROP_XDISTANCE, (int)ObjectGetInteger(0, a[i], OBJPROP_XDISTANCE));
+      ObjectSetInteger(0, sh, OBJPROP_YDISTANCE, (int)ObjectGetInteger(0, a[i], OBJPROP_YDISTANCE));
+      ObjectSetInteger(0, sh, OBJPROP_XSIZE, (int)ObjectGetInteger(0, a[i], OBJPROP_XSIZE) + 1);
+      ObjectSetInteger(0, sh, OBJPROP_YSIZE, (int)ObjectGetInteger(0, a[i], OBJPROP_YSIZE) + ex);
+   }
+}
+
 void UpdateHubBackground()
 {
    //--- FIX (v1.08): UsableChartWidth() (not the raw chart width) - see its
@@ -889,8 +974,9 @@ void UpdateHubBackground()
    ObjectSetInteger(0, HUB_BG_NAME, OBJPROP_YDISTANCE, bgY);
    ObjectSetInteger(0, HUB_BG_NAME, OBJPROP_XSIZE, bgWidth);
    ObjectSetInteger(0, HUB_BG_NAME, OBJPROP_YSIZE, bgHeight);
-   ObjectSetInteger(0, HUB_BG_NAME, OBJPROP_BGCOLOR, HubBgColor);
-   ObjectSetInteger(0, HUB_BG_NAME, OBJPROP_COLOR, HubBorderColor);
+   ObjectSetInteger(0, HUB_BG_NAME, OBJPROP_BGCOLOR, HubBgNow());
+   ObjectSetInteger(0, HUB_BG_NAME, OBJPROP_COLOR, HubBorderNow());
+   HubSyncShadows();   // v1.17
 }
 
 void RefreshButtonColors()
@@ -950,7 +1036,7 @@ void HighlightActiveButton(DRAW_MODE mode)
       ObjectSetInteger(0, all[i], OBJPROP_BGCOLOR, (i == activeIdx) ? fullColors[i] : DimColor(fullColors[i]));
 
    // v1.11: RANGE رنگ کاربر ندارد؛ همان قرارداد teal/gray توگل‌های دیگر
-   ObjectSetInteger(0, BTN_MEASURE, OBJPROP_BGCOLOR, (mode == MODE_MEASURE) ? CLR_SUBTOGGLE_ACTIVE : CLR_INACTIVE_GRAY);
+   HubSetBg(BTN_MEASURE, (mode == MODE_MEASURE) ? CLR_SUBTOGGLE_ACTIVE : CLR_INACTIVE_GRAY);
 }
 
 void CheckHubIntegrity()
@@ -1481,8 +1567,8 @@ void CreateLabelButtons()
          ObjectSetString(0, name, OBJPROP_TEXT, LabelList[i]);
          ObjectSetInteger(0, name, OBJPROP_FONTSIZE, HubLabelFontSize(LabelList[i]));
          ObjectSetInteger(0, name, OBJPROP_COLOR, clrWhite);
-         ObjectSetString(0, name, OBJPROP_FONT, "Arial Bold");
-         ObjectSetInteger(0, name, OBJPROP_BGCOLOR, CLR_INACTIVE_GRAY);
+         ObjectSetString(0, name, OBJPROP_FONT, "Segoe UI Bold");
+         HubSetBg(name, CLR_INACTIVE_GRAY);
          ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
          ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
          ObjectSetInteger(0, name, OBJPROP_ZORDER, PANEL_ZORDER_FG);
@@ -1499,7 +1585,8 @@ void ApplyLabelsMinimizedState()
       ObjectSetInteger(0, LabelButtonName(i), OBJPROP_TIMEFRAMES, tf);
    }
    ObjectSetString(0, BTN_MASTER_LABELS, OBJPROP_TEXT, gLabelsMinimized ? "Label +" : "Label −");
-   ObjectSetInteger(0, BTN_MASTER_LABELS, OBJPROP_BGCOLOR, gLabelsMinimized ? CLR_INACTIVE_GRAY : clrSeaGreen);
+   HubSetBg(BTN_MASTER_LABELS, gLabelsMinimized ? CLR_INACTIVE_GRAY : HubClrMaster());
+   HubSyncShadows();   // v1.17
    //--- BUG-FIX (v1.07, lag): see ApplyDrawMinimizedState() - same reasoning.
 }
 
@@ -1516,7 +1603,8 @@ void ApplyIndicatorsMinimizedState()
    for(int ind = 0; ind < 9; ind++)
       ObjectSetInteger(0, indicatorBtnsAll[ind], OBJPROP_TIMEFRAMES, tf);
    ObjectSetString(0, BTN_MASTER_INDICATOR, OBJPROP_TEXT, gIndicatorsMinimized ? "Ind +" : "Ind −");
-   ObjectSetInteger(0, BTN_MASTER_INDICATOR, OBJPROP_BGCOLOR, gIndicatorsMinimized ? CLR_INACTIVE_GRAY : clrSeaGreen);
+   HubSetBg(BTN_MASTER_INDICATOR, gIndicatorsMinimized ? CLR_INACTIVE_GRAY : HubClrMaster());
+   HubSyncShadows();   // v1.17
    //--- BUG-FIX (v1.07, lag): see ApplyDrawMinimizedState() - same reasoning.
 }
 
@@ -1526,7 +1614,7 @@ void DisarmLabel()
    {
       for(int i = 0; i < LABEL_COUNT; i++)
          if(LabelList[i] == armedLabel)
-            ObjectSetInteger(0, LabelButtonName(i), OBJPROP_BGCOLOR, CLR_INACTIVE_GRAY);
+            HubSetBg(LabelButtonName(i), CLR_INACTIVE_GRAY);
    }
    armedLabel = "";
    //--- FEATURE (v1.08, Item 1): every path that cancels/consumes an armed
@@ -2038,7 +2126,7 @@ void Theme_CreateOneButton(string name, string text, int fontSize, string tip)
    ObjectSetInteger(0, name, OBJPROP_YSIZE, BtnHeight);
    ObjectSetString(0, name, OBJPROP_TEXT, text);
    ObjectSetInteger(0, name, OBJPROP_FONTSIZE, fontSize);
-   ObjectSetString(0, name, OBJPROP_FONT, "Arial Bold");
+   ObjectSetString(0, name, OBJPROP_FONT, "Segoe UI Bold");
    ObjectSetString(0, name, OBJPROP_TOOLTIP, tip);
    ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
    ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
@@ -2053,9 +2141,9 @@ void Theme_CreateButtons()
       ObjectSetInteger(0, BTN_MASTER_THEME, OBJPROP_CORNER, CORNER_LEFT_UPPER);
       ObjectSetInteger(0, BTN_MASTER_THEME, OBJPROP_XSIZE, g_effMasterBtnWidth);
       ObjectSetInteger(0, BTN_MASTER_THEME, OBJPROP_YSIZE, BtnHeight);
-      ObjectSetInteger(0, BTN_MASTER_THEME, OBJPROP_FONTSIZE, 7);
+      ObjectSetInteger(0, BTN_MASTER_THEME, OBJPROP_FONTSIZE, 8);   // v1.17: 7 -> 8 (MT5 renders 7pt pixelated)
       ObjectSetInteger(0, BTN_MASTER_THEME, OBJPROP_COLOR, clrWhite);
-      ObjectSetInteger(0, BTN_MASTER_THEME, OBJPROP_BGCOLOR, clrSeaGreen);
+      HubSetBg(BTN_MASTER_THEME, HubClrMaster());
       ObjectSetInteger(0, BTN_MASTER_THEME, OBJPROP_SELECTABLE, false);
       ObjectSetInteger(0, BTN_MASTER_THEME, OBJPROP_HIDDEN, true);
       ObjectSetInteger(0, BTN_MASTER_THEME, OBJPROP_ZORDER, PANEL_ZORDER_FG);
@@ -2063,9 +2151,9 @@ void Theme_CreateButtons()
    for(int i = 0; i < THEME_COUNT; i++)
       Theme_CreateOneButton(Theme_BtnName(i), IntegerToString(i + 1), 8, "Theme " + IntegerToString(i + 1));
    ObjectDelete(0, BTN_THEME_ORIG);   // v1.16: بقایای نسخه‌ی قبل
-   Theme_CreateOneButton(BTN_THEME_CUSTOM, "Custom", 6, "Custom theme (your saved chart colours, same on all charts)");
-   Theme_CreateOneButton(BTN_THEME_CSAVE,  "S", 7, "SAVE the current chart colours as Custom (set colours first with F8)");
-   Theme_CreateOneButton(BTN_THEME_CRESET, "R", 7, "RESET: clear the saved Custom theme");
+   Theme_CreateOneButton(BTN_THEME_CUSTOM, "Custom", 7, "Custom theme (your saved chart colours, same on all charts)");
+   Theme_CreateOneButton(BTN_THEME_CSAVE,  "S", 8, "SAVE the current chart colours as Custom (set colours first with F8)");
+   Theme_CreateOneButton(BTN_THEME_CRESET, "R", 8, "RESET: clear the saved Custom theme");
    Theme_RefreshButtons();
 }
 
@@ -2079,8 +2167,8 @@ void Theme_RefreshButtons()
       if(ObjectFind(0, nm) < 0) continue;
 
       color bg = (i == g_themeActive) ? THEME_BULL[i] : DimColor(THEME_BULL[i]);
-      bool needBorder = (MathAbs(Theme_Lum(bg) - Theme_Lum(HubBgColor)) < 40);
-      color bd = needBorder ? (color)C'200,200,200' : bg;
+      bool needBorder = (MathAbs(Theme_Lum(bg) - Theme_Lum(HubBgNow())) < 40);
+      color bd = needBorder ? (color)(HubMono() ? C'122,122,122' : C'200,200,200') : bg;
       if(!ObjectSetInteger(0, nm, OBJPROP_BORDER_COLOR, bd) && needBorder)
          bg = SOB_BlendTowardWhite(bg, 35);
       ObjectSetInteger(0, nm, OBJPROP_BGCOLOR, bg);
@@ -2092,8 +2180,8 @@ void Theme_RefreshButtons()
       color cu[13]; bool cg, cs, ca; int cm;
       if(Theme_CustomExists() && Theme_CustomLoad(cu, cg, cs, ca, cm))
          cbg = (g_themeActive == THEME_CUSTOM_IDX) ? cu[5] : DimColor(cu[5]);
-      bool needB = (MathAbs(Theme_Lum(cbg) - Theme_Lum(HubBgColor)) < 40);
-      ObjectSetInteger(0, BTN_THEME_CUSTOM, OBJPROP_BORDER_COLOR, needB ? (color)C'200,200,200' : cbg);
+      bool needB = (MathAbs(Theme_Lum(cbg) - Theme_Lum(HubBgNow())) < 40);
+      ObjectSetInteger(0, BTN_THEME_CUSTOM, OBJPROP_BORDER_COLOR, needB ? (color)(HubMono() ? C'122,122,122' : C'200,200,200') : cbg);
       ObjectSetInteger(0, BTN_THEME_CUSTOM, OBJPROP_BGCOLOR, cbg);
       ObjectSetInteger(0, BTN_THEME_CUSTOM, OBJPROP_COLOR, (Theme_Lum(cbg) > 140) ? clrBlack : clrWhite);
    }
@@ -2102,8 +2190,8 @@ void Theme_RefreshButtons()
       if(ObjectFind(0, sbtn[q]) >= 0)
       {
          ObjectSetInteger(0, sbtn[q], OBJPROP_BORDER_COLOR, CLR_INACTIVE_GRAY);
-         ObjectSetInteger(0, sbtn[q], OBJPROP_BGCOLOR, CLR_INACTIVE_GRAY);
-         ObjectSetInteger(0, sbtn[q], OBJPROP_COLOR, clrWhite);
+         HubSetBg(sbtn[q], CLR_INACTIVE_GRAY);
+         ObjectSetInteger(0, sbtn[q], OBJPROP_COLOR, HubBtnTxt(CLR_INACTIVE_GRAY));
       }
 }
 
@@ -2116,7 +2204,8 @@ void ApplyThemeMinimizedState()
    ObjectSetInteger(0, BTN_THEME_CSAVE,  OBJPROP_TIMEFRAMES, tf);
    ObjectSetInteger(0, BTN_THEME_CRESET, OBJPROP_TIMEFRAMES, tf);
    ObjectSetString(0, BTN_MASTER_THEME, OBJPROP_TEXT, gThemeMinimized ? "Theme +" : "Theme −");
-   ObjectSetInteger(0, BTN_MASTER_THEME, OBJPROP_BGCOLOR, gThemeMinimized ? CLR_INACTIVE_GRAY : clrSeaGreen);
+   HubSetBg(BTN_MASTER_THEME, gThemeMinimized ? CLR_INACTIVE_GRAY : HubClrMaster());
+   HubSyncShadows();   // v1.17
    //--- (v1.07 lag rule) بدون UpdateHubBackground()/ChartRedraw() - صدازننده‌ها PositionButtons() و یک ChartRedraw() دارند.
 }
 
