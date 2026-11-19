@@ -4,18 +4,18 @@ A risk-management and trade-discipline toolkit for MetaTrader. It is **not** a t
 
 | Component | Platform | Version | Folder |
 |---|---|---|---|
-| RiskManager EA | MT4 | v109 | `MT4/RiskManager_EA/` |
+| RiskManager EA | MT4 | v110 | `MT4/RiskManager_EA/` |
 | Strategy list data | MT4 | v107 | `MT4/MQL4_Files/` |
-| Executive Hub (indicator) | MT4 | v1.22 | `Hub/` |
-| RiskManager EA | MT5 | v75.16 | `MT5/RiskManager_EA_MT5/` |
-| Executive Hub (indicator) | MT5 | v1.16 | `MT5/ExecutiveHub_MT5/` |
+| Executive Hub (indicator) | MT4 | v1.23 | `Hub/` |
+| RiskManager EA | MT5 | v75.17 | `MT5/RiskManager_EA_MT5/` |
+| Executive Hub (indicator) | MT5 | v1.17 | `MT5/ExecutiveHub_MT5/` |
 
 ## Status
-2026-11-19: MT4 EA **v110**, MT4 Hub **1.23**, MT5 EA **v75.17** and MT5 Hub **1.17** were compiled and tested by Mahmoud (confirmed by the author; see `New-Graphic-Design/CHANGELOG.md`). Note: the version table above still lists the previous numbers (v109 / Hub 1.22 / v75.16 / Hub 1.16) and has not been updated yet.
+2026-11-19: MT4 EA **v110**, MT4 Hub **1.23**, MT5 EA **v75.17** and MT5 Hub **1.17** were compiled and tested by Mahmoud (confirmed by the author; see `New-Graphic-Design/CHANGELOG.md`).
 
 ## Install (MT4)
-1. Copy the contents of `MT4/RiskManager_EA/` to `MQL4/Experts/RiskManager_EA/` and compile `RiskManager_EA_v109.mq4` in MetaEditor.
-2. Copy `Hub/` to `MQL4/Indicators/` and compile `ExecutiveHub_v1.22.mq4`.
+1. Copy the contents of `MT4/RiskManager_EA/` to `MQL4/Experts/RiskManager_EA/` and compile `RiskManager_EA_v110.mq4` in MetaEditor.
+2. Copy `Hub/` to `MQL4/Indicators/` and compile `ExecutiveHub_v1.23.mq4`.
 3. Copy `MT4/MQL4_Files/RM_StrategySetups.txt` to `MQL4/Files/` (the EA migrates an older list once and keeps a backup).
 
 ## Install (MT5, hedging account)
