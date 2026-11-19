@@ -23,11 +23,11 @@ A risk-management and trade-discipline toolkit for MetaTrader. It is **not** a t
 
 ## Docs
 - `docs/changelogs/` — one changelog per version (Persian).
-- `docs/guide/` — Persian user guides. MT4: `..._MT4_v109_Hub1.22.pdf` = v106 guide + v107, v108 and v109 addenda (latest); older PDFs are kept for history. MT5: `..._MT5_v75.16_Hub1.16.pdf` (latest).
+- `docs/guide/` — Persian user guides. MT4: `..._MT4_v110_Hub1.23.pdf` (latest, Mono Gray); MT5: `..._MT5_v75.17_Hub1.17.pdf` (latest). Older PDFs are kept for history.
 - `docs/reports/` — delivery reports.
 
 ## Tags
-`mt4-v107`, `hub-v1.20`, `mt4-v108`, `hub-v1.21`, `hub-v1.22`, `mt4-v109`, `mt5-v75.16`, `mt5-v75.15`, `hub-mt5-v1.16` (tags are created via GitHub Releases)
+`mt4-v107`, `hub-v1.20`, `mt4-v108`, `hub-v1.21`, `hub-v1.22`, `mt4-v109`, `mt5-v75.16`, `mt5-v75.15`, `hub-mt5-v1.16`, `mt4-v110`, `hub-v1.23`, `mt5-v75.17`, `hub-mt5-v1.17` (tags are created via GitHub Releases)
 
 Personal data (trade journals/CSV, logs, account numbers, personal `.set` files) must never be committed; see `.gitignore`.
 
