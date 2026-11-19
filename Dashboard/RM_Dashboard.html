@@ -1,0 +1,420 @@
+<!doctype html><!--RMDASH:109-->
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RiskManager — داشبورد معاملات</title>
+<style>
+:root{
+  --bg:#E4E4E4; --surface:#F2F2F2; --card:#FFFFFF; --line:#C9C9C9; --text:#1A1A1A; --muted:#595959;
+  --accent:#0E7C86; --accent-soft:#D3ECEE; --pos:#0E7C86; --neg:#B5432F; --warn:#B7791F; --grid:#E0E0E0; --shadow:0 1px 2px rgba(0,0,0,.08);
+}
+:root[data-theme=dark]{
+  --bg:#14171C; --surface:#1C2027; --card:#222730; --line:#363D49; --text:#E8EAED; --muted:#98A1AD;
+  --accent:#3FB8C3; --accent-soft:#1D3B40; --pos:#3FB8C3; --neg:#E0715C; --warn:#E0A63A; --grid:#2C323C; --shadow:none;
+}
+*{box-sizing:border-box}
+html,body{overflow-x:hidden}
+body{margin:0;background:var(--bg);color:var(--text);font-family:Vazirmatn,"Segoe UI",Tahoma,"Segoe UI",sans-serif;font-size:14px;line-height:1.7}
+.num{direction:ltr;unicode-bidi:isolate;font-variant-numeric:tabular-nums}
+header{position:sticky;top:0;z-index:20;background:var(--surface);border-bottom:1px solid var(--line);padding:10px 20px;display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center}
+header h1{font-size:16px;margin:0;font-weight:700}
+header .sp{flex:1}
+.btn{background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:5px 12px;font:inherit;cursor:pointer;box-shadow:var(--shadow)}
+.btn:hover{border-color:var(--accent)} .btn.on{background:var(--accent);border-color:var(--accent);color:#fff}
+select,input[type=date],input[type=text]{background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:4px 8px;font:inherit}
+.filters{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;padding:10px 20px;background:var(--surface);border-bottom:1px solid var(--line)}
+.filters label{color:var(--muted);font-size:12px;display:flex;gap:6px;align-items:center}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{border:0;background:var(--card);color:var(--text);padding:4px 10px;font:inherit;cursor:pointer;border-inline-start:1px solid var(--line)}
+.seg button:first-child{border-inline-start:0} .seg button.on{background:var(--accent);color:#fff}
+main{padding:16px 20px 40px;max-width:1500px;margin:0 auto}
+.grid{display:grid;gap:12px}.grid>*{min-width:0}
+svg{direction:ltr}
+.card{overflow-x:auto}
+.kpis{grid-template-columns:repeat(auto-fill,minmax(172px,1fr))}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px 14px;box-shadow:var(--shadow)}
+.kpi .l{color:var(--muted);font-size:12px}.kpi .v{white-space:nowrap;font-size:20px;font-weight:700;margin-top:2px}.kpi .s{color:var(--muted);font-size:11px}
+.pos{color:var(--pos)}.neg{color:var(--neg)}.warn{color:var(--warn)}
+h2{font-size:14px;margin:22px 0 8px;font-weight:700;display:flex;gap:8px;align-items:center}
+h2:before{content:"";width:4px;height:14px;background:var(--accent);border-radius:2px;display:inline-block}
+.card h3{margin:0 0 8px;font-size:13px;font-weight:700}
+.cols2{grid-template-columns:repeat(auto-fit,minmax(min(420px,100%),1fr))}
+.cols3{grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr))}
+svg text{font-family:"Segoe UI",Tahoma,sans-serif;fill:var(--muted);font-size:10px}
+.tip{position:fixed;pointer-events:none;background:#111;color:#fff;border-radius:6px;padding:6px 9px;font-size:12px;z-index:50;display:none;direction:rtl;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th,td{padding:5px 8px;border-bottom:1px solid var(--grid);text-align:center;white-space:nowrap}
+th{color:var(--muted);font-weight:700;cursor:pointer;position:sticky;top:0;background:var(--card)}
+td:first-child,th:first-child{text-align:start}
+.bar{height:8px;border-radius:4px;background:var(--grid);position:relative;min-width:90px;direction:ltr}
+.bar i{position:absolute;top:0;bottom:0;border-radius:4px}
+.empty{text-align:center;padding:60px 20px;border:2px dashed var(--line);border-radius:12px;margin:30px auto;max-width:640px;background:var(--surface)}
+.empty.drag{border-color:var(--accent);background:var(--accent-soft)}
+.muted{color:var(--muted)} .small{font-size:12px}
+.note{background:var(--accent-soft);border-radius:6px;padding:6px 10px;font-size:12px;color:var(--text)}
+.scroll{overflow:auto;max-height:520px}
+.pill{display:inline-block;padding:0 7px;border-radius:10px;font-size:11px;background:var(--grid);color:var(--text)}
+.pill.tp{background:var(--accent-soft);color:var(--pos)}.pill.sl{background:#f3d6d0;color:var(--neg)}
+:root[data-theme=dark] .pill.sl{background:#4a2a24}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.cal div{aspect-ratio:1.5;border-radius:4px;font-size:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--grid);color:var(--text)}
+.cal .h{background:transparent;color:var(--muted);aspect-ratio:auto}
+.hid{display:none!important}
+@media print{header,.filters{position:static}.btn{display:none}}
+</style>
+</head>
+<body>
+<header>
+  <h1>RiskManager — داشبورد معاملات</h1>
+  <span class="muted small" id="fileInfo"></span>
+  <span class="sp"></span>
+  <button class="btn" id="btnOpen">انتخاب فایل CSV</button>
+  <button class="btn" id="btnReload" title="خواندن دوباره‌ی داده‌های EA">به‌روزرسانی</button>
+  <button class="btn" id="btnTheme">تیره / روشن</button>
+  <input type="file" id="file" accept=".csv,text/csv" class="hid">
+</header>
+<div class="filters hid" id="filters">
+  <label>از <input type="date" id="dFrom"></label>
+  <label>تا <input type="date" id="dTo"></label>
+  <span class="seg" id="presets">
+    <button data-p="today">امروز</button><button data-p="7">۷ روز</button><button data-p="30">۳۰ روز</button><button data-p="month">این ماه</button><button data-p="all" class="on">همه</button>
+  </span>
+  <label>نماد <select id="fSymbol"></select></label>
+  <label>استراتژی <select id="fStrategy"></select></label>
+  <label>ستاپ <select id="fSetup"></select></label>
+  <label>سشن <select id="fSession"></select></label>
+  <label>جهت <select id="fDir"></select></label>
+  <label>وضعیت ذهنی <select id="fMental"></select></label>
+  <span class="seg" id="unitSeg"><button data-u="R" class="on">R</button><button data-u="PCT">%</button><button data-u="USD">$</button></span>
+  <label><input type="checkbox" id="onlyEA" checked> فقط معاملات EA (دارای R)</label>
+  <label><input type="checkbox" id="mergeChain"> ادغام زنجیره‌ی Scale-in</label>
+</div>
+<main id="main">
+  <div class="empty" id="drop">
+    <h2 style="justify-content:center;margin:0 0 6px">فایل ژورنال را اینجا بینداز</h2>
+    <p class="muted">فایل <span class="num">RM_TradeJournal_&lt;حساب&gt;.csv</span> را از پوشه‌ی <span class="num">MQL4\Files</span> یا <span class="num">MQL5\Files</span> بکش و رها کن، یا دکمه‌ی «انتخاب فایل CSV» را بزن.<br>داده‌ها فقط در همین مرورگر پردازش می‌شود و جایی ارسال نمی‌شود.</p>
+    <button class="btn on" onclick="document.getElementById('file').click()">انتخاب فایل CSV</button>
+  </div>
+  <div id="dash" class="hid"></div>
+</main>
+<div class="tip" id="tip"></div>
+
+<script src="RM_Dashboard_Data.js"></script>
+<script>
+"use strict";
+/* ============ داده ============ */
+const $ = s => document.querySelector(s);
+const NA = v => v===undefined||v===null||v===""||v==="N/A";
+const nz = v => NA(v)?NaN:parseFloat(v);
+const isTrue = v => String(v).toLowerCase()==="true";
+const pad = n => String(n).padStart(2,"0");
+function parseTime(s){ if(NA(s)) return NaN; const m=/(\d{4})\.(\d\d)\.(\d\d)(?: (\d\d):(\d\d)(?::(\d\d))?)?/.exec(s); if(!m) return NaN; return Date.UTC(+m[1],+m[2]-1,+m[3],+(m[4]||0),+(m[5]||0),+(m[6]||0)); }
+const dayKey = t => { const d=new Date(t); return d.getUTCFullYear()+"-"+pad(d.getUTCMonth()+1)+"-"+pad(d.getUTCDate()); };
+function parseCSV(text){
+  text=text.replace(/^﻿/,""); const rows=[]; let f="",r=[],q=false;
+  for(let i=0;i<text.length;i++){ const c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){f+='"';i++;} else q=false; } else f+=c; }
+    else if(c==='"') q=true; else if(c===","){ r.push(f); f=""; }
+    else if(c==="\n"||c==="\r"){ if(c==="\r"&&text[i+1]==="\n") i++; r.push(f); f=""; if(r.length>1||r[0]!=="") rows.push(r); r=[]; }
+    else f+=c; }
+  if(f!==""||r.length){ r.push(f); rows.push(r); }
+  if(!rows.length) return [];
+  const h=rows[0]; return rows.slice(1).filter(x=>x.length>=5).map(x=>{ const o={}; h.forEach((k,i)=>o[k.trim()]=x[i]===undefined?"":x[i]); return o; });
+}
+let RAW=[], TR=[], ALL=[], UNIT="R", sortKey="close", sortDir=-1, tableLimit=150;
+const F={from:null,to:null,symbol:"",strategy:"",setup:"",session:"",dir:"",mental:"",onlyEA:true,merge:false};
+
+function buildTrades(rows, merge){
+  const g=new Map();
+  rows.forEach(r=>{ const k=merge&&!NA(r.RootTicket)?r.RootTicket:r.Ticket; if(!g.has(k)) g.set(k,[]); g.get(k).push(r); });
+  const out=[];
+  g.forEach((rs,id)=>{
+    rs.sort((a,b)=>parseTime(a.CloseTime)-parseTime(b.CloseTime));
+    const first=rs[0], last=rs[rs.length-1];
+    let R=0,pct=0,hasR=false,profit=0,lots=0,slip=0,fav=NaN,adv=NaN, riskUSD=NaN;
+    const seen=new Set();
+    rs.forEach(r=>{ const x=nz(r.TradeR); if(!isNaN(x)){R+=x;hasR=true; const rp=nz(r.RiskPct); if(!isNaN(rp)) pct+=x*rp;} const p=nz(r.ProfitUSD); if(!isNaN(p)) profit+=p; const l=nz(r.Lots); if(!isNaN(l)) lots+=l;
+      const s=nz(r.Slippage_USD); if(!isNaN(s)) slip+=s;
+      const mf=nz(r.MaxFavR); if(!isNaN(mf)) fav=isNaN(fav)?mf:Math.max(fav,mf);
+      const mn=nz(r.MinFavR); if(!isNaN(mn)) adv=isNaN(adv)?mn:Math.min(adv,mn);
+      if(!seen.has(r.Ticket)){ seen.add(r.Ticket); const ru=nz(r.RiskUSD); if(!isNaN(ru)) riskUSD=(isNaN(riskUSD)?0:riskUSD)+ru; } });
+    const open=Math.min(...rs.map(r=>parseTime(r.OpenTime)).filter(x=>!isNaN(x)));
+    const close=parseTime(last.CloseTime);
+    const tag=v=>NA(v)?"—":v;
+    const ctx={level:rs.some(r=>isTrue(r.ContextLevelOK)),cycle:rs.some(r=>isTrue(r.ContextCycleClarityOK)),time:rs.some(r=>isTrue(r.ContextTimeOK)),candle:rs.some(r=>isTrue(r.ContextCandleConfirmOK)),none:rs.some(r=>isTrue(r.ContextNone))};
+    out.push({id, ticket:first.Ticket, symbol:first.Symbol, dir:first.Direction, open, close, lots, R:hasR?R:NaN, pct:hasR?pct:NaN, hasR, profit, riskUSD,
+      strategy:tag(first.Strategy), setup:tag(first.Setup), session:tag(first.Session), mental:tag(first.MentalState), tf:tag(first.TimeframeAtOpen),
+      result:tag(last.Result), halfRisk:isTrue(first.WasHalfRisk), ea:isTrue(first.IsEAManaged), parts:rs.length,
+      beh:nz(first.BehaviorErrorsThisTrade), entryViol:isTrue(first.EntryIntervalViolation), slTamper:isTrue(first.SLTamperedFlag), cdLock:isTrue(first.OpenedDuringCooldownLock),
+      fav, adv, slip, ctx, closeReason:last.CloseReason_Server||"", openHour:new Date(open).getUTCHours(), dow:new Date(open).getUTCDay(), dur:(close-open)/60000,
+      hasCtx:Object.values(ctx).some(Boolean)});
+  });
+  out.sort((a,b)=>a.close-b.close); return out;
+}
+function outcome(t){ const v=t.hasR?t.R:t.profit; const th=t.hasR?0.05:1; return v>th?"win":v<-th?"loss":"be"; }
+
+/* ============ فیلتر ============ */
+function applyFilters(){
+  return ALL.filter(t=>{
+    if(F.onlyEA&&!t.hasR) return false;
+    if(F.from!==null&&t.close<F.from) return false;
+    if(F.to!==null&&t.close>=F.to+86400000) return false;
+    if(F.symbol&&t.symbol!==F.symbol) return false;
+    if(F.strategy&&t.strategy!==F.strategy) return false;
+    if(F.setup&&t.setup!==F.setup) return false;
+    if(F.session&&t.session!==F.session) return false;
+    if(F.dir&&t.dir!==F.dir) return false;
+    if(F.mental&&t.mental!==F.mental) return false;
+    return true; });
+}
+const val = t => UNIT==="R"?(t.hasR?t.R:0):UNIT==="PCT"?(t.hasR?t.pct:0):t.profit;
+const uFmt = (x,d=2)=> (UNIT==="R"? x.toFixed(d)+"R" : UNIT==="PCT"? x.toFixed(2)+"%" : (x<0?"-":"")+"$"+Math.abs(x).toFixed(0));
+const UN = () => UNIT==="R"?"R":UNIT==="PCT"?"درصد حساب":"$";
+const cls = x => x>0?"pos":x<0?"neg":"";
+const sgn = (x,d=2)=> (x>0?"+":"")+x.toFixed(d);
+
+/* ============ آمار ============ */
+function stats(ts){
+  const n=ts.length; const rt=ts.filter(t=>t.hasR); const s={n,nR:rt.length};
+  s.netR=rt.reduce((a,t)=>a+t.R,0); s.netUSD=ts.reduce((a,t)=>a+t.profit,0); s.netPct=rt.reduce((a,t)=>a+t.pct,0);
+  const w=ts.filter(t=>outcome(t)==="win"), l=ts.filter(t=>outcome(t)==="loss");
+  s.wins=w.length; s.losses=l.length; s.be=n-w.length-l.length;
+  s.winRate=n?w.length/n:NaN;
+  const gw=w.reduce((a,t)=>a+val(t),0), gl=-l.reduce((a,t)=>a+val(t),0);
+  s.pf=gl>0?gw/gl:(gw>0?Infinity:NaN);
+  s.avgWin=w.length?gw/w.length:NaN; s.avgLoss=l.length?-gl/l.length:NaN;
+  s.exp=n?ts.reduce((a,t)=>a+val(t),0)/n:NaN;
+  // drawdown (بر اساس واحد انتخابی)
+  let eq=0,pk=0,dd=0; ts.forEach(t=>{eq+=val(t); pk=Math.max(pk,eq); dd=Math.min(dd,eq-pk);}); s.maxDD=dd;
+  let cl=0,mcl=0; ts.forEach(t=>{ if(outcome(t)==="loss"){cl++;mcl=Math.max(mcl,cl);} else if(outcome(t)==="win") cl=0; }); s.maxConsLoss=mcl;
+  s.best=ts.length?Math.max(...ts.map(val)):NaN; s.worst=ts.length?Math.min(...ts.map(val)):NaN;
+  s.avgDur=n?ts.reduce((a,t)=>a+t.dur,0)/n:NaN;
+  s.beh=ts.filter(t=>t.beh>0).length; s.entryViol=ts.filter(t=>t.entryViol).length; s.slTamper=ts.filter(t=>t.slTamper).length; s.cdLock=ts.filter(t=>t.cdLock).length;
+  const fw=w.filter(t=>t.hasR&&!isNaN(t.fav)&&t.fav>0); s.capture=fw.length?fw.reduce((a,t)=>a+Math.min(1,t.R/t.fav),0)/fw.length:NaN;
+  s.days=new Set(ts.map(t=>dayKey(t.close))).size;
+  return s;
+}
+const fmtDur = m => isNaN(m)?"—":m<90?Math.round(m)+" دقیقه":(m/60).toFixed(1)+" ساعت";
+
+/* ============ ابزار SVG ============ */
+const tipEl=$("#tip");
+function showTip(e,html){ tipEl.innerHTML=html; tipEl.style.display="block"; const w=tipEl.offsetWidth; let x=e.clientX+14, y=e.clientY+14; if(x+w>innerWidth-8) x=e.clientX-w-14; tipEl.style.left=x+"px"; tipEl.style.top=y+"px"; }
+function hideTip(){ tipEl.style.display="none"; }
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+function svgOpen(w,h){ return `<svg viewBox="0 0 ${w} ${h}" width="100%" style="display:block" preserveAspectRatio="xMidYMid meet">`; }
+function niceTicks(min,max,n=5){ if(min===max){max=min+1;} const span=max-min, step0=span/n, mag=Math.pow(10,Math.floor(Math.log10(step0))), r=step0/mag; const step=(r<1.5?1:r<3?2:r<7?5:10)*mag; const a=Math.floor(min/step)*step, b=Math.ceil(max/step)*step; const t=[]; for(let v=a;v<=b+1e-9;v+=step) t.push(+v.toFixed(10)); return t; }
+
+function lineChart(id, pts, opt={}){ // pts:[{x:i,y,label}]
+  const W=720,H=opt.h||260,L=44,Rm=12,T=10,B=24; const el=$(id); if(!pts.length){el.innerHTML='<div class="muted small">داده‌ای نیست</div>';return;}
+  const ys=pts.map(p=>p.y); const ticks=niceTicks(Math.min(0,...ys),Math.max(0,...ys)); const y0=ticks[0],y1=ticks[ticks.length-1];
+  const X=i=>L+(pts.length===1?0:i/(pts.length-1))*(W-L-Rm), Y=v=>T+(1-(v-y0)/(y1-y0))*(H-T-B);
+  let s=svgOpen(W,H);
+  ticks.forEach(v=>{ s+=`<line x1="${L}" x2="${W-Rm}" y1="${Y(v)}" y2="${Y(v)}" stroke="${css('--grid')}"/><text x="${L-5}" y="${Y(v)+3}" text-anchor="end">${v}</text>`; });
+  s+=`<line x1="${L}" x2="${W-Rm}" y1="${Y(0)}" y2="${Y(0)}" stroke="${css('--muted')}" stroke-dasharray="3 3"/>`;
+  const d=pts.map((p,i)=>(i?"L":"M")+X(i).toFixed(1)+" "+Y(p.y).toFixed(1)).join(" ");
+  const col=opt.color||css('--accent');
+  if(opt.area){ s+=`<path d="${d} L ${X(pts.length-1)} ${Y(0)} L ${X(0)} ${Y(0)} Z" fill="${opt.areaColor||col}" opacity=".18"/>`; }
+  s+=`<path d="${d}" fill="none" stroke="${col}" stroke-width="2" stroke-linejoin="round"/>`;
+  // محور x: برچسب‌های تاریخ
+  const nl=Math.min(6,pts.length); for(let k=0;k<nl;k++){ const i=Math.round(k*(pts.length-1)/Math.max(1,nl-1)); s+=`<text x="${X(i)}" y="${H-6}" text-anchor="middle">${pts[i].xl||""}</text>`; }
+  s+=`<line id="${id.slice(1)}_v" y1="${T}" y2="${H-B}" stroke="${css('--muted')}" opacity="0"/><circle id="${id.slice(1)}_c" r="4" fill="${col}" opacity="0"/>`;
+  s+=`<rect x="${L}" y="${T}" width="${W-L-Rm}" height="${H-T-B}" fill="transparent" class="hov"/></svg>`;
+  el.innerHTML=s; const svg=el.querySelector("svg"), vl=svg.querySelector("#"+id.slice(1)+"_v"), cc=svg.querySelector("#"+id.slice(1)+"_c");
+  svg.querySelector(".hov").addEventListener("mousemove",e=>{ const r=svg.getBoundingClientRect(); const px=(e.clientX-r.left)/r.width*W; let i=Math.round((px-L)/(W-L-Rm)*(pts.length-1)); i=Math.max(0,Math.min(pts.length-1,i)); const p=pts[i];
+    vl.setAttribute("x1",X(i));vl.setAttribute("x2",X(i));vl.setAttribute("opacity",.6); cc.setAttribute("cx",X(i));cc.setAttribute("cy",Y(p.y));cc.setAttribute("opacity",1); showTip(e,p.tip||p.y.toFixed(2)); });
+  svg.querySelector(".hov").addEventListener("mouseleave",()=>{vl.setAttribute("opacity",0);cc.setAttribute("opacity",0);hideTip();});
+}
+function barChart(id, items, opt={}){ // items:[{label,v,tip}]
+  const W=720,H=opt.h||220,L=44,Rm=10,T=10,B=26; const el=$(id); if(!items.length){el.innerHTML='<div class="muted small">داده‌ای نیست</div>';return;}
+  const vs=items.map(i=>i.v); const ticks=niceTicks(Math.min(0,...vs),Math.max(0,...vs)); const y0=ticks[0],y1=ticks[ticks.length-1];
+  const Y=v=>T+(1-(v-y0)/(y1-y0))*(H-T-B), bw=(W-L-Rm)/items.length;
+  let s=svgOpen(W,H); ticks.forEach(v=>{ s+=`<line x1="${L}" x2="${W-Rm}" y1="${Y(v)}" y2="${Y(v)}" stroke="${css('--grid')}"/><text x="${L-5}" y="${Y(v)+3}" text-anchor="end">${v}</text>`; });
+  const every=Math.ceil(items.length/12);
+  items.forEach((it,i)=>{ const x=L+i*bw+bw*.12, w=bw*.76, yv=Y(it.v), y0p=Y(0); const col=it.color||(it.v>=0?css('--pos'):css('--neg'));
+    s+=`<rect class="b" data-i="${i}" x="${x}" y="${Math.min(yv,y0p)}" width="${w}" height="${Math.max(1,Math.abs(yv-y0p))}" fill="${col}" rx="2"/>`;
+    if(i%every===0) s+=`<text x="${x+w/2}" y="${H-8}" text-anchor="middle">${it.label}</text>`; });
+  s+="</svg>"; el.innerHTML=s;
+  el.querySelectorAll(".b").forEach(r=>{ const it=items[+r.dataset.i]; r.addEventListener("mousemove",e=>showTip(e,it.tip||it.v)); r.addEventListener("mouseleave",hideTip); });
+}
+function scatter(id, pts){
+  const W=520,H=300,L=40,Rm=10,T=10,B=26; const el=$(id); if(!pts.length){el.innerHTML='<div class="muted small">داده‌ای نیست</div>';return;}
+  const xs=pts.map(p=>p.x), ys=pts.map(p=>p.y); const tx=niceTicks(Math.min(0,...xs),Math.max(...xs)), ty=niceTicks(Math.min(...ys,0),Math.max(...ys,0));
+  const X=v=>L+(v-tx[0])/(tx[tx.length-1]-tx[0])*(W-L-Rm), Y=v=>T+(1-(v-ty[0])/(ty[ty.length-1]-ty[0]))*(H-T-B);
+  let s=svgOpen(W,H); ty.forEach(v=>s+=`<line x1="${L}" x2="${W-Rm}" y1="${Y(v)}" y2="${Y(v)}" stroke="${css('--grid')}"/><text x="${L-5}" y="${Y(v)+3}" text-anchor="end">${v}</text>`);
+  tx.forEach(v=>s+=`<text x="${X(v)}" y="${H-8}" text-anchor="middle">${v}</text>`);
+  s+=`<line x1="${X(0)}" x2="${X(0)}" y1="${T}" y2="${H-B}" stroke="${css('--line')}"/>`;
+  const m=Math.min(tx[tx.length-1],ty[ty.length-1]); s+=`<line x1="${X(0)}" y1="${Y(0)}" x2="${X(m)}" y2="${Y(m)}" stroke="${css('--muted')}" stroke-dasharray="4 3"/>`;
+  pts.forEach((p,i)=>{ s+=`<circle class="p" data-i="${i}" cx="${X(p.x)}" cy="${Y(p.y)}" r="3.5" fill="${p.y>=0?css('--pos'):css('--neg')}" opacity=".7"/>`; });
+  s+="</svg>"; el.innerHTML=s; el.querySelectorAll(".p").forEach(c=>{ const p=pts[+c.dataset.i]; c.addEventListener("mousemove",e=>showTip(e,p.tip)); c.addEventListener("mouseleave",hideTip); });
+}
+
+/* ============ بخش‌ها ============ */
+function groupBy(ts,keyFn){ const m=new Map(); ts.forEach(t=>{ const k=keyFn(t); if(k===null||k===undefined) return; if(!m.has(k)) m.set(k,[]); m.get(k).push(t); }); return m; }
+function breakdownCard(title, ts, keyFn, opt={}){
+  const g=groupBy(ts,keyFn); let rows=[...g.entries()].map(([k,a])=>({k,a,s:stats(a),sum:a.reduce((x,t)=>x+val(t),0)}));
+  if(opt.order) rows.sort((x,y)=>opt.order(x.k)-opt.order(y.k)); else rows.sort((x,y)=>y.a.length-x.a.length);
+  if(!rows.length) return `<div class="card"><h3>${title}</h3><div class="muted small">داده‌ای نیست</div></div>`;
+  const mx=Math.max(...rows.map(r=>Math.abs(r.sum)),1e-9);
+  return `<div class="card"><h3>${title}</h3><table><tr><th></th><th>تعداد</th><th>Win%</th><th>مجموع</th><th></th><th>امید ریاضی</th></tr>`+
+   rows.map(r=>{ const w=Math.abs(r.sum)/mx*50; const bar=`<div class="bar"><i style="${r.sum>=0?`left:50%;`:`right:50%;`}width:${w}%;background:${r.sum>=0?css('--pos'):css('--neg')}"></i></div>`;
+     return `<tr><td>${r.k}</td><td class="num">${r.a.length}</td><td class="num">${isNaN(r.s.winRate)?"—":(r.s.winRate*100).toFixed(0)+"%"}</td><td class="num ${cls(r.sum)}">${uFmt(r.sum)}</td><td>${bar}</td><td class="num ${cls(r.s.exp)}">${isNaN(r.s.exp)?"—":uFmt(r.s.exp)}</td></tr>`; }).join("")+`</table></div>`;
+}
+function ctxCard(ts){
+  const names=[["level","Key Level"],["cycle","Cycle Clarity"],["time","Key Time"],["candle","Candle Confirmation"],["none","No Checklist Confirmation"]];
+  const tagged=ts.filter(t=>t.hasCtx).length;
+  let h=`<div class="card"><h3>چک‌لیست کانتکست (با / بدون هر مورد)</h3>`;
+  if(!tagged) return h+`<div class="muted small">هنوز تریدی با چک‌لیست کانتکست ثبت نشده (MT5 v75.14 به بعد).</div></div>`;
+  h+=`<table><tr><th>مورد</th><th>تعداد با</th><th>امید ریاضی با</th><th>تعداد بدون</th><th>امید ریاضی بدون</th></tr>`;
+  names.forEach(([k,n])=>{ const a=ts.filter(t=>t.ctx[k]), b=ts.filter(t=>!t.ctx[k]&&t.hasCtx); const sa=stats(a), sb=stats(b);
+    h+=`<tr><td>${n}</td><td class="num">${a.length}</td><td class="num ${cls(sa.exp)}">${isNaN(sa.exp)?"—":uFmt(sa.exp)}</td><td class="num">${b.length}</td><td class="num ${cls(sb.exp)}">${isNaN(sb.exp)?"—":uFmt(sb.exp)}</td></tr>`; });
+  return h+`</table><div class="muted small" style="margin-top:6px">«بدون» فقط تریدهایی را می‌شمارد که چک‌لیست برایشان ثبت شده (${tagged} ترید).</div></div>`;
+}
+function behaviorCard(ts){
+  const rows=[["خطای رفتاری در این ترید",t=>t.beh>0],["نقض Entry Interval",t=>t.entryViol],["باز شدن SL (SL Tamper)",t=>t.slTamper],["باز شدن در زمان قفل",t=>t.cdLock],["ریسک نصف (Half Risk)",t=>t.halfRisk]];
+  let h=`<div class="card"><h3>رفتار و انضباط (با / بدون)</h3><table><tr><th>مورد</th><th>تعداد</th><th>امید ریاضی دارد</th><th>امید ریاضی ندارد</th></tr>`;
+  rows.forEach(([n,f])=>{ const a=ts.filter(f), b=ts.filter(t=>!f(t)); const sa=stats(a), sb=stats(b);
+    h+=`<tr><td>${n}</td><td class="num">${a.length}</td><td class="num ${cls(sa.exp)}">${isNaN(sa.exp)?"—":uFmt(sa.exp)}</td><td class="num ${cls(sb.exp)}">${isNaN(sb.exp)?"—":uFmt(sb.exp)}</td></tr>`; });
+  return h+`</table></div>`;
+}
+const DOW=["یکشنبه","دوشنبه","سه‌شنبه","چهارشنبه","پنجشنبه","جمعه","شنبه"];
+function heatmap(ts){
+  const cell=new Map(); ts.forEach(t=>{ const k=t.dow+"-"+t.openHour; if(!cell.has(k)) cell.set(k,{n:0,s:0}); const c=cell.get(k); c.n++; c.s+=val(t); });
+  const mx=Math.max(1e-9,...[...cell.values()].map(c=>Math.abs(c.s/c.n)));
+  const days=[6,0,1,2,3,4,5]; const cw=26,ch=22,L=64,T=18,W=L+24*cw+6,H=T+7*ch+6;
+  let s=svgOpen(W,H); for(let h=0;h<24;h+=2) s+=`<text x="${L+h*cw+cw/2}" y="12" text-anchor="middle">${pad(h)}</text>`;
+  days.forEach((d,r)=>{ s+=`<text x="${L-6}" y="${T+r*ch+ch/2+3}" text-anchor="end">${DOW[d]}</text>`;
+    for(let h=0;h<24;h++){ const c=cell.get(d+"-"+h); let fill=css('--grid'),op=1; if(c){ const a=c.s/c.n; fill=a>=0?css('--pos'):css('--neg'); op=.2+.8*Math.min(1,Math.abs(a)/mx); }
+      s+=`<rect class="hc" data-k="${d}-${h}" x="${L+h*cw}" y="${T+r*ch}" width="${cw-2}" height="${ch-2}" rx="3" fill="${fill}" opacity="${op}"/>`; } });
+  s+="</svg>"; $("#heat").innerHTML=s; $("#heat").querySelectorAll(".hc").forEach(r=>{ const c=cell.get(r.dataset.k); r.addEventListener("mousemove",e=>{ if(!c) return hideTip(); const [d,h]=r.dataset.k.split("-"); showTip(e,`${DOW[d]} ساعت ${pad(h)}:00 سرور<br>${c.n} ترید · مجموع ${uFmt(c.s)} · میانگین ${uFmt(c.s/c.n)}`); }); r.addEventListener("mouseleave",hideTip); });
+}
+function calendar(ts){
+  const m=new Map(); ts.forEach(t=>{ const k=dayKey(t.close); m.set(k,(m.get(k)||0)+val(t)); });
+  if(!m.size){ $("#cal").innerHTML='<div class="muted small">داده‌ای نیست</div>'; return; }
+  const keys=[...m.keys()].sort(); const mx=Math.max(...[...m.values()].map(Math.abs),1e-9);
+  const months=[...new Set(keys.map(k=>k.slice(0,7)))]; const mn=["ژانویه","فوریه","مارس","آوریل","مه","ژوئن","ژوئیه","اوت","سپتامبر","اکتبر","نوامبر","دسامبر"];
+  let h="";
+  months.forEach(ym=>{ const [y,mo]=ym.split("-").map(Number); const first=new Date(Date.UTC(y,mo-1,1)); const dim=new Date(Date.UTC(y,mo,0)).getUTCDate(); const off=(first.getUTCDay()+1)%7; // شنبه=0
+    const tot=keys.filter(k=>k.startsWith(ym)).reduce((a,k)=>a+m.get(k),0);
+    h+=`<div class="card"><h3>${mn[mo-1]} ${y} <span class="num ${cls(tot)}" style="font-weight:400">${uFmt(tot)}</span></h3><div class="cal">`+["ش","ی","د","س","چ","پ","ج"].map(x=>`<div class="h">${x}</div>`).join("");
+    for(let i=0;i<off;i++) h+=`<div class="h"></div>`;
+    for(let d=1;d<=dim;d++){ const k=ym+"-"+pad(d), v=m.get(k); if(v===undefined){ h+=`<div style="opacity:.45">${d}</div>`; continue; }
+      const a=.25+.75*Math.min(1,Math.abs(v)/mx); h+=`<div title="${k}: ${uFmt(v)}" style="background:${v>=0?css('--pos'):css('--neg')};color:#fff;opacity:${a+.1}">${d}<b class="num">${UNIT==="USD"?v.toFixed(0):v.toFixed(1)}</b></div>`; }
+    h+=`</div></div>`; });
+  $("#cal").innerHTML=h;
+}
+function tradeTable(ts){
+  const cols=[["close","بسته شدن",t=>fmtDT(t.close)],["symbol","نماد",t=>t.symbol],["dir","جهت",t=>t.dir==="Buy"?"خرید":"فروش"],["strategy","استراتژی",t=>t.strategy],["setup","ستاپ",t=>t.setup],
+    ["session","سشن",t=>t.session],["R","R",t=>t.hasR?`<span class="num ${cls(t.R)}">${sgn(t.R)}</span>`:"—"],["pct","%",t=>t.hasR&&!isNaN(t.pct)?`<span class="num ${cls(t.pct)}">${sgn(t.pct)}%</span>`:"—"],["profit","سود $",t=>`<span class="num ${cls(t.profit)}">${t.profit.toFixed(0)}</span>`],
+    ["fav","MaxFavR",t=>isNaN(t.fav)?"—":`<span class="num">${t.fav.toFixed(2)}</span>`],["result","نتیجه",t=>`<span class="pill ${t.result==="TP"?"tp":t.result==="SL"?"sl":""}">${t.result}</span>`],["mental","ذهنی",t=>t.mental],["dur","مدت",t=>fmtDur(t.dur)],["parts","پارشال",t=>t.parts>1?t.parts:""]];
+  const sorted=[...ts].sort((a,b)=>{ const x=a[sortKey],y=b[sortKey]; const c=(typeof x==="string")?x.localeCompare(y):((isNaN(x)?-1e9:x)-(isNaN(y)?-1e9:y)); return c*sortDir; });
+  const shown=sorted.slice(0,tableLimit);
+  $("#tbl").innerHTML=`<table><tr>${cols.map(c=>`<th data-k="${c[0]}">${c[1]}${sortKey===c[0]?(sortDir>0?" ▲":" ▼"):""}</th>`).join("")}</tr>`+shown.map(t=>`<tr>${cols.map(c=>`<td>${c[2](t)}</td>`).join("")}</tr>`).join("")+`</table>`+
+    (sorted.length>shown.length?`<div style="text-align:center;margin:8px"><button class="btn" id="more">نمایش بیشتر (${sorted.length-shown.length})</button></div>`:"");
+  $("#tbl").querySelectorAll("th").forEach(th=>th.onclick=()=>{ const k=th.dataset.k; if(sortKey===k) sortDir*=-1; else {sortKey=k;sortDir=-1;} tradeTable(ts); });
+  const mb=$("#more"); if(mb) mb.onclick=()=>{tableLimit+=200;tradeTable(ts);};
+}
+const fmtDT = t => { const d=new Date(t); return d.getUTCFullYear()+"."+pad(d.getUTCMonth()+1)+"."+pad(d.getUTCDate())+" "+pad(d.getUTCHours())+":"+pad(d.getUTCMinutes()); };
+
+/* ============ رندر اصلی ============ */
+function kpi(l,v,s="",c=""){ return `<div class="card kpi"><div class="l">${l}</div><div class="v num ${c}">${v}</div><div class="s">${s}</div></div>`; }
+function render(){
+  const ts=applyFilters(); const s=stats(ts); const d=$("#dash");
+  if(!ts.length){ d.innerHTML=`<div class="empty">برای این فیلترها معامله‌ای نیست.</div>`; return; }
+  const pf = s.pf===Infinity?"∞":isNaN(s.pf)?"—":s.pf.toFixed(2);
+  d.innerHTML=`
+  <div class="grid kpis">
+    ${kpi("تعداد معاملات",s.n,`${s.wins} برد · ${s.losses} باخت · ${s.be} سر‌به‌سر`)}
+    ${kpi("مجموع ("+UN()+")", uFmt(UNIT==="R"?s.netR:UNIT==="PCT"?s.netPct:s.netUSD), `${s.netR.toFixed(1)}R · ${s.netPct.toFixed(2)}% · $${s.netUSD.toFixed(0)}`, cls(UNIT==="R"?s.netR:UNIT==="PCT"?s.netPct:s.netUSD))}
+    ${kpi("نرخ برد",isNaN(s.winRate)?"—":(s.winRate*100).toFixed(1)+"%")}
+    ${kpi("ضریب سود (PF)",pf,"",s.pf>=1?"pos":"neg")}
+    ${kpi("امید ریاضی",isNaN(s.exp)?"—":uFmt(s.exp),"به‌ازای هر معامله",cls(s.exp))}
+    ${kpi("میانگین برد / باخت",(isNaN(s.avgWin)?"—":uFmt(s.avgWin))+" / "+(isNaN(s.avgLoss)?"—":uFmt(s.avgLoss)),isNaN(s.avgWin/s.avgLoss)?"":"نسبت "+(s.avgWin/s.avgLoss).toFixed(2))}
+    ${kpi("حداکثر افت (DD)",uFmt(s.maxDD),"از اوج سرمایه‌ی بازه","neg")}
+    ${kpi("بیشترین باخت پشت‌سرهم",s.maxConsLoss)}
+    ${kpi("بهترین / بدترین",uFmt(s.best)+" / "+uFmt(s.worst))}
+    ${kpi("میانگین زمان نگهداری",fmtDur(s.avgDur))}
+    ${kpi("روزهای معاملاتی",s.days,"میانگین "+(s.n/s.days).toFixed(1)+" معامله در روز")}
+    ${kpi("سهم گرفته‌شده از حرکت",isNaN(s.capture)?"—":(s.capture*100).toFixed(0)+"%","R نهایی ÷ MaxFavR در بردها")}
+  </div>
+  <h2>منحنی سرمایه و افت</h2>
+  <div class="grid cols2">
+    <div class="card"><h3>منحنی سرمایه (تجمعی، ${UN()})</h3><div id="eq"></div></div>
+    <div class="card"><h3>افت از اوج (Drawdown)</h3><div id="dd"></div></div>
+  </div>
+  <h2>نتیجه‌ی روزانه</h2>
+  <div class="grid cols2">
+    <div class="card"><h3>مجموع روزانه</h3><div id="daily"></div></div>
+    <div class="card"><h3>توزیع نتیجه‌ی معاملات (R)</h3><div id="hist"></div></div>
+  </div>
+  <div id="cal" class="grid cols3" style="margin-top:12px"></div>
+  <h2>دسته‌بندی عملکرد</h2>
+  <div class="grid cols2">
+    ${breakdownCard("استراتژی",ts,t=>t.strategy)}${breakdownCard("ستاپ",ts,t=>t.setup)}
+    ${breakdownCard("سشن",ts,t=>t.session)}${breakdownCard("وضعیت ذهنی",ts,t=>t.mental)}
+    ${breakdownCard("جهت",ts,t=>t.dir==="Buy"?"خرید":"فروش")}${breakdownCard("نماد",ts,t=>t.symbol)}
+    ${breakdownCard("نتیجه‌ی خروج",ts,t=>t.result)}${breakdownCard("تایم‌فریم ورود",ts,t=>t.tf)}
+    ${breakdownCard("روز هفته (ورود)",ts,t=>DOW[t.dow],{order:k=>[6,0,1,2,3,4,5].map(i=>DOW[i]).indexOf(k)})}
+    ${breakdownCard("ساعت ورود (سرور)",ts,t=>pad(t.openHour)+":00",{order:k=>+k.slice(0,2)})}
+  </div>
+  <h2>ساعت و روز (میانگین ${UN()} هر ترید)</h2>
+  <div class="card"><div id="heat" style="max-width:820px"></div></div>
+  <h2>رفتار و کانتکست</h2>
+  <div class="grid cols2">${behaviorCard(ts)}${ctxCard(ts)}</div>
+  <h2>حرکت قیمت در برابر نتیجه (MaxFavR در برابر R نهایی)</h2>
+  <div class="grid cols2"><div class="card"><h3>هر نقطه یک معامله — خط چین: نتیجه = بیشترین حرکت</h3><div id="sc"></div></div>
+  <div class="card"><h3>چطور بخوانیم</h3><p class="small muted">نقطه‌های سمت چپ/بالای خط یعنی معامله به اندازه‌ی حرکت ممکن گرفته شده؛ نقطه‌های پایین‌تر از خط یعنی بخشی از حرکت از دست رفته. اگر بردها زیر خط پراکنده‌اند، خروج زودهنگام یا Half Close بیش از حد را بررسی کن.</p></div></div>
+  <h2>فهرست معاملات</h2>
+  <div class="card"><div class="scroll" id="tbl"></div></div>`;
+  // منحنی‌ها
+  let eq=0,pk=0; const pts=[],dds=[]; ts.forEach((t,i)=>{ eq+=val(t); pk=Math.max(pk,eq); const lab=fmtDT(t.close).slice(5,10);
+    const tip=`#${t.ticket} · ${t.symbol} ${t.dir}<br>${fmtDT(t.close)}<br>نتیجه ${uFmt(val(t))} · تجمعی ${uFmt(eq)}`; pts.push({y:+eq.toFixed(3),xl:lab,tip}); dds.push({y:+(eq-pk).toFixed(3),xl:lab,tip:`${fmtDT(t.close)}<br>افت ${uFmt(eq-pk)}`}); });
+  lineChart("#eq",pts,{area:true}); lineChart("#dd",dds,{color:css('--neg'),area:true,h:260});
+  const dm=new Map(); ts.forEach(t=>{ const k=dayKey(t.close); dm.set(k,(dm.get(k)||0)+val(t)); });
+  barChart("#daily",[...dm.entries()].sort().map(([k,v])=>({label:k.slice(5),v:+v.toFixed(2),tip:k+"<br>"+uFmt(v)})));
+  const bins=[]; for(let x=-3;x<5;x+=0.5) bins.push({lo:x,n:0}); ts.filter(t=>t.hasR).forEach(t=>{ let i=Math.floor((Math.max(-3,Math.min(4.99,t.R))+3)/0.5); bins[i].n++; });
+  barChart("#hist",bins.map(b=>({label:b.lo.toFixed(1),v:b.n,color:b.lo>=0?css('--pos'):css('--neg'),tip:`${b.lo.toFixed(1)}R تا ${(b.lo+.5).toFixed(1)}R: ${b.n} معامله`})));
+  heatmap(ts); calendar(ts);
+  scatter("#sc",ts.filter(t=>t.hasR&&!isNaN(t.fav)).map(t=>({x:t.fav,y:t.R,tip:`#${t.ticket} ${t.strategy}<br>MaxFavR ${t.fav.toFixed(2)} · نتیجه ${sgn(t.R)}R`})));
+  tradeTable(ts);
+}
+
+/* ============ فیلترها و فایل ============ */
+function fillSelect(id,label,vals){ const el=$(id), cur=el.value; el.innerHTML=`<option value="">همه</option>`+[...new Set(vals)].sort().map(v=>`<option>${v}</option>`).join(""); el.value=[...el.options].some(o=>o.value===cur)?cur:""; }
+function setPreset(p){
+  const last=ALL.length?Math.max(...ALL.map(t=>t.close)):Date.now(); const day=86400000, ld=Date.UTC(new Date(last).getUTCFullYear(),new Date(last).getUTCMonth(),new Date(last).getUTCDate());
+  let from=null,to=null; if(p==="today"){from=to=ld;} else if(p==="7"){from=ld-6*day;to=ld;} else if(p==="30"){from=ld-29*day;to=ld;} else if(p==="month"){const d=new Date(ld); from=Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),1);to=ld;}
+  F.from=from;F.to=to; $("#dFrom").value=from?dayKey(from):""; $("#dTo").value=to?dayKey(to):"";
+  document.querySelectorAll("#presets button").forEach(b=>b.classList.toggle("on",b.dataset.p===p));
+}
+function load(text,name,noStore){
+  RAW=parseCSV(text); if(!RAW.length||!("Ticket" in RAW[0])||!("TradeR" in RAW[0])){ alert("این فایل شبیه ژورنال RiskManager نیست (ستون‌های Ticket / TradeR پیدا نشد)."); return; }
+  ALL=buildTrades(RAW,F.merge); TR=ALL;
+  $("#drop").classList.add("hid"); $("#dash").classList.remove("hid"); $("#filters").classList.remove("hid");
+  fillSelect("#fSymbol","",ALL.map(t=>t.symbol)); fillSelect("#fStrategy","",ALL.map(t=>t.strategy)); fillSelect("#fSetup","",ALL.map(t=>t.setup));
+  fillSelect("#fSession","",ALL.map(t=>t.session)); fillSelect("#fDir","",ALL.map(t=>t.dir)); fillSelect("#fMental","",ALL.map(t=>t.mental));
+  const a=Math.min(...ALL.map(t=>t.close)), b=Math.max(...ALL.map(t=>t.close));
+  $("#fileInfo").textContent=(name||"")+" — "+RAW.length+" ردیف، "+ALL.length+" معامله ("+dayKey(a)+" تا "+dayKey(b)+")";
+  if(!noStore) try{ localStorage.setItem("rm_dash_csv",text); localStorage.setItem("rm_dash_name",name||""); }catch(e){}
+  render();
+}
+function onFile(f){ if(!f) return; const r=new FileReader(); r.onload=()=>load(r.result,f.name); r.readAsText(f); }
+$("#btnOpen").onclick=()=>$("#file").click(); $("#file").onchange=e=>onFile(e.target.files[0]);
+["dragover","dragenter"].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault();$("#drop").classList.add("drag");}));
+["dragleave","drop"].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault();$("#drop").classList.remove("drag");}));
+document.addEventListener("drop",e=>onFile(e.dataTransfer.files[0]));
+$("#dFrom").onchange=e=>{F.from=e.target.value?parseTime(e.target.value.replace(/-/g,".")):null;document.querySelectorAll("#presets button").forEach(b=>b.classList.remove("on"));render();};
+$("#dTo").onchange=e=>{F.to=e.target.value?parseTime(e.target.value.replace(/-/g,".")):null;document.querySelectorAll("#presets button").forEach(b=>b.classList.remove("on"));render();};
+document.querySelectorAll("#presets button").forEach(b=>b.onclick=()=>{setPreset(b.dataset.p);render();});
+[["#fSymbol","symbol"],["#fStrategy","strategy"],["#fSetup","setup"],["#fSession","session"],["#fDir","dir"],["#fMental","mental"]].forEach(([id,k])=>$(id).onchange=e=>{F[k]=e.target.value;render();});
+document.querySelectorAll("#unitSeg button").forEach(b=>b.onclick=()=>{UNIT=b.dataset.u;document.querySelectorAll("#unitSeg button").forEach(x=>x.classList.toggle("on",x===b));render();});
+$("#onlyEA").onchange=e=>{F.onlyEA=e.target.checked;render();};
+$("#mergeChain").onchange=e=>{F.merge=e.target.checked;ALL=buildTrades(RAW,F.merge);render();};
+$("#btnReload").onclick=()=>location.reload();
+$("#btnTheme").onclick=()=>{ const r=document.documentElement; const d=r.dataset.theme==="dark"; if(d) delete r.dataset.theme; else r.dataset.theme="dark"; try{localStorage.setItem("rm_dash_theme",d?"light":"dark");}catch(e){} if(ALL.length) render(); };
+try{ if(localStorage.getItem("rm_dash_theme")==="dark") document.documentElement.dataset.theme="dark"; }catch(e){}
+if(window.RM_CSV_LINES&&window.RM_CSV_LINES.length){ const m=window.RM_DASH_META||{}; load(window.RM_CSV_LINES.join("\n"),"داده‌ی EA"+(m.account?" (حساب "+m.account+")":"")+(m.generated?" — آخرین به‌روزرسانی "+m.generated:""),true); }
+else { try{ const t=localStorage.getItem("rm_dash_csv"); if(t) load(t,localStorage.getItem("rm_dash_name")||"آخرین فایل"); }catch(e){} }
+</script>
+</body>
+</html>

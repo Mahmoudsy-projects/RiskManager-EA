@@ -502,6 +502,7 @@ bool ExportTradeJournalCSV(string &outFilename)
    }
 
    FileClose(handle);
+   RM_WriteDashboardData(filename);   // v109: همان CSV را برای داشبورد HTML (RM_Dashboard_Data.js) هم می‌نویسد
    outFilename = filename;
    return true;
 }

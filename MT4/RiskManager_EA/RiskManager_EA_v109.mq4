@@ -1011,7 +1011,7 @@
 //|   MagicNumber and base sizing untouched.                          |
 //+------------------------------------------------------------------+
 #property copyright "Risk Manager EA"
-#property version   "108.00"
+#property version   "109.00"
 // v45 (Punch List Round 3, Item 7): custom icon embedded straight into the compiled .ex4 - shows
 // up in the Navigator panel and the Properties/About dialog. RiskManager.ico must sit next to this
 // .mq4 at compile time only; after that it's baked into the .ex4, no external file needed at runtime.
@@ -1474,6 +1474,7 @@ string P = "RM9_";
 // Reports، بعد Tools.
 #include "RM_Trailing.mqh"
 #include "RM_AutoActions.mqh"
+#include "RM_DashboardExport.mqh"   // v109: داشبورد HTML بدون DLL
 #include "RM_Reports.mqh"
 #include "RM_Tools.mqh"
 
@@ -1521,6 +1522,7 @@ int OnInit()
    LoadTradeTagsFile();         // v56 (Trade Tagging): نگاشت Ticket->Strategy/Setup ذخیره‌شده از قبل
    EnsureContextChecklistSeed();  // FEAT-037 (v81): هم‌الگوی EnsureStrategySetupsSeed بالا - فایل جدا/مستقل RM_ContextChecklist.txt
    g_ctxTagVerSeen = GlobalVariableCheck(GV_CTXTAGFILE_VER) ? GlobalVariableGet(GV_CTXTAGFILE_VER) : 0.0;  // v101 (همان دلیل بالا)
+   RM_EnsureDashboardFiles();     // v109: RM_Dashboard.html + RM_Dashboard_Data.js در MQL4\Files (بدون DLL)
    LoadContextTagsFile();         // FEAT-037 (v81): هم‌الگوی LoadTradeTagsFile بالا - نگاشت Ticket->۵ Boolean ذخیره‌شده از قبل (RM_ContextTags.csv)
    EnsureScreenshotFolder();    // v66 (آیتم ۱): یک‌بار می‌سازه (اگه از قبل نبود) - زیرپوشه‌ی TRADE SCREENSHOTS برای اسکرین‌شات‌های لحظه‌ی خروج (v59)
    BuildPanel();

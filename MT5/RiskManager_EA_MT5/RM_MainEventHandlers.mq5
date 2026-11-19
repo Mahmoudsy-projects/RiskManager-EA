@@ -154,6 +154,7 @@ int OnInit()
    EnsureStrategySetupsSeed();   // [Stage 5c-ii, RM_Tools.mqh stub]
    LoadTradeTagsFile();          // [Stage 5c-ii, RM_Tools.mqh stub]
    EnsureContextChecklistSeed(); // v75.14 (MT4 v81 FEAT-037): فایل جدا/مستقل RM_ContextChecklist.txt
+   RM_EnsureDashboardFiles();    // v75.16: RM_Dashboard.html + RM_Dashboard_Data.js در MQL5\Files (بدون DLL)
    LoadContextTagsFile();        // v75.14: نگاشت Ticket->۵ Boolean (RM_ContextTags.csv)
    EnsureScreenshotFolder();     // [Stage 5c-ii, RM_Tools.mqh stub]
    BuildPanel();                 // real, Stage 5c-i

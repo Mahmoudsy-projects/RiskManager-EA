@@ -5,7 +5,7 @@
 //| No stubs remain anywhere in this build.                          |
 //+------------------------------------------------------------------+
 #property copyright   "Risk Manager EA"
-#property version     "75.15"   // v75.14 (FEAT-037 چک‌لیست کانتکست - P5). v75.13 (Scale-in + ریشه‌ی زنجیره + FEAT-045 خط ریسک)
+#property version     "75.16"   // v75.14 (FEAT-037 چک‌لیست کانتکست - P5). v75.13 (Scale-in + ریشه‌ی زنجیره + FEAT-045 خط ریسک)
 #property description "A discipline enforcement engine, not a predictive tool."
 #property description "Focuses on what can be controlled: risk, behavior, execution."
 #property description "1. Mathematical: sizing, capital preservation, D/W/M limits, Emergency Stop."
@@ -221,6 +221,7 @@ EDashboardMode g_dashboardMode = DASH_TRADING;
 #include "RM_CooldownEngine.mq5"
 #include "RM_MainEA_FloatingDD.mq5"
 #include "RM_MainEA_NetResultR.mq5"
+#include "RM_DashboardExport.mq5"   // v75.16: داشبورد HTML بدون DLL
 #include "RM_Reports.mq5"
 #include "RM_Dashboard.mq5"
 #include "RM_Tools.mq5"
