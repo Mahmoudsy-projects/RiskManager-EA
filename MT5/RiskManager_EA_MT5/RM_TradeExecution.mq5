@@ -1261,8 +1261,9 @@ void BuildHalfSelectWindow()
       string tagStrat = GetTagStrategy(tkt);
       string tagTxt   = (tagStrat!="N/A") ? tagStrat : PositionGetString(POSITION_COMMENT);
 
-      string lbl = psym+" "+(buy?"BUY":"SELL")+" "+DoubleToString(PositionGetDouble(POSITION_VOLUME),2)+
-                   " | "+rTxt+" | #"+IntegerToString(tkt);   // v75.18: متن کوتاه
+      // (R حذف شد؛ جهت با فلش ▲ خرید / ▼ فروش - U+25B2 / U+25BC)
+      string lbl = psym+" "+ShortToString(buy?9650:9660)+" "+DoubleToString(PositionGetDouble(POSITION_VOLUME),2)+
+                   " | #"+IntegerToString(tkt);   // v75.18: متن کوتاه
 
       ArrayResize(labels, cnt+1);
       ArrayResize(g_halfSelTickets, cnt+1);

@@ -1140,8 +1140,9 @@ void BuildHalfSelectWindow()
       string tagTxt   = (tagStrat!="N/A") ? tagStrat : OrderComment();
 
       // v111: متن کوتاه تا در عرض ردیف جا شود: نماد، جهت، لات | R | تیکت (تگ/کامنت حذف شد)
-      string lbl = OrderSymbol()+" "+(buy?"BUY":"SELL")+" "+DoubleToString(OrderLots(),2)+
-                   " | "+rTxt+" | #"+IntegerToString(tkt);
+      // (R حذف شد؛ جهت با فلش ▲ خرید / ▼ فروش - U+25B2 / U+25BC)
+      string lbl = OrderSymbol()+" "+ShortToString(buy?9650:9660)+" "+DoubleToString(OrderLots(),2)+
+                   " | #"+IntegerToString(tkt);
 
       ArrayResize(labels, cnt+1);
       ArrayResize(g_halfSelTickets, cnt+1);
