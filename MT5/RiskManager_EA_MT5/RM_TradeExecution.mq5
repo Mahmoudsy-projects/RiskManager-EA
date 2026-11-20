@@ -1262,7 +1262,7 @@ void BuildHalfSelectWindow()
       string tagTxt   = (tagStrat!="N/A") ? tagStrat : PositionGetString(POSITION_COMMENT);
 
       // (R حذف شد؛ جهت با فلش ▲ خرید / ▼ فروش - U+25B2 / U+25BC)
-      string lbl = psym+" "+ShortToString(buy?9650:9660)+" "+DoubleToString(PositionGetDouble(POSITION_VOLUME),2)+
+      string lbl = psym+" "+ShortToString((ushort)(buy?9650:9660))+" "+DoubleToString(PositionGetDouble(POSITION_VOLUME),2)+
                    " | #"+IntegerToString(tkt);   // v75.18: متن کوتاه
 
       ArrayResize(labels, cnt+1);

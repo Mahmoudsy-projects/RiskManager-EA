@@ -1141,7 +1141,7 @@ void BuildHalfSelectWindow()
 
       // v111: متن کوتاه تا در عرض ردیف جا شود: نماد، جهت، لات | R | تیکت (تگ/کامنت حذف شد)
       // (R حذف شد؛ جهت با فلش ▲ خرید / ▼ فروش - U+25B2 / U+25BC)
-      string lbl = OrderSymbol()+" "+ShortToString(buy?9650:9660)+" "+DoubleToString(OrderLots(),2)+
+      string lbl = OrderSymbol()+" "+ShortToString((ushort)(buy?9650:9660))+" "+DoubleToString(OrderLots(),2)+
                    " | #"+IntegerToString(tkt);
 
       ArrayResize(labels, cnt+1);
