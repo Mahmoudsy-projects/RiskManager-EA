@@ -1261,8 +1261,8 @@ void BuildHalfSelectWindow()
       string tagStrat = GetTagStrategy(tkt);
       string tagTxt   = (tagStrat!="N/A") ? tagStrat : PositionGetString(POSITION_COMMENT);
 
-      // (R حذف شد؛ جهت با فلش ▲ خرید / ▼ فروش - U+25B2 / U+25BC)
-      string lbl = psym+" "+ShortToString((ushort)(buy?9650:9660))+" "+DoubleToString(PositionGetDouble(POSITION_VOLUME),2)+
+      // (R حذف شد؛ فلش ▲/▼ در MT4 نمایش داده نمی‌شد - برگشت به BUY/SELL)
+      string lbl = psym+" "+(buy?"BUY":"SELL")+" "+DoubleToString(PositionGetDouble(POSITION_VOLUME),2)+
                    " | #"+IntegerToString(tkt);   // v75.18: متن کوتاه
 
       ArrayResize(labels, cnt+1);
@@ -1303,7 +1303,7 @@ void BuildHalfSelectWindow()
    {
       for(int r=0;r<cnt;r++)
       {
-         BtnC(HALFSEL_WIN_PREFIX+"ROW_"+IntegerToString(r), winX, cy, winW, rowH, labels[r], TH_ROW, corner, 7);
+         BtnC(HALFSEL_WIN_PREFIX+"ROW_"+IntegerToString(r), winX, cy, winW, rowH, labels[r], TH_ROW, corner, 8);
          cy += rowH + pad;
       }
    }

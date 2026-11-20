@@ -1140,8 +1140,8 @@ void BuildHalfSelectWindow()
       string tagTxt   = (tagStrat!="N/A") ? tagStrat : OrderComment();
 
       // v111: متن کوتاه تا در عرض ردیف جا شود: نماد، جهت، لات | R | تیکت (تگ/کامنت حذف شد)
-      // (R حذف شد؛ جهت با فلش ▲ خرید / ▼ فروش - U+25B2 / U+25BC)
-      string lbl = OrderSymbol()+" "+ShortToString((ushort)(buy?9650:9660))+" "+DoubleToString(OrderLots(),2)+
+      // (R حذف شد؛ فلش ▲/▼ در MT4 نمایش داده نمی‌شد - برگشت به BUY/SELL)
+      string lbl = OrderSymbol()+" "+(buy?"BUY":"SELL")+" "+DoubleToString(OrderLots(),2)+
                    " | #"+IntegerToString(tkt);
 
       ArrayResize(labels, cnt+1);
@@ -1182,7 +1182,7 @@ void BuildHalfSelectWindow()
    {
       for(int r=0;r<cnt;r++)
       {
-         BtnC(HALFSEL_WIN_PREFIX+"ROW_"+IntegerToString(r), winX, cy, winW, rowH, labels[r], TH_ROW, corner, 7);
+         BtnC(HALFSEL_WIN_PREFIX+"ROW_"+IntegerToString(r), winX, cy, winW, rowH, labels[r], TH_ROW, corner, 8);
          cy += rowH + pad;
       }
    }
