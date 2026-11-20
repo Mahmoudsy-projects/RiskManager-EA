@@ -807,13 +807,15 @@ bool HalfCloseTicket(ulong tkt, double closePercent, string reasonTag)
    bool buy   = (posType==POSITION_TYPE_BUY);
    double op  = PositionGetDouble(POSITION_PRICE_OPEN), sl = PositionGetDouble(POSITION_SL);
    double slDist = MathAbs(op-sl);
-   double ask=SymbolInfoDouble(_Symbol,SYMBOL_ASK), bid=SymbolInfoDouble(_Symbol,SYMBOL_BID);
+   // v75.18: قیمت/MinLot از نماد خودِ پوزیشن (نه چارت جاری)
+   string tSym = PositionGetString(POSITION_SYMBOL);
+   double ask=SymbolInfoDouble(tSym,SYMBOL_ASK), bid=SymbolInfoDouble(tSym,SYMBOL_BID);
    double curPrice = buy?bid:ask;
    bool reachedTP1 = (slDist>0) && (buy ? (curPrice>=op+slDist) : (curPrice<=op-slDist));
    if(reachedTP1) AddHalfExempt(tkt);
 
    double closeLots = NormalizeDouble(PositionGetDouble(POSITION_VOLUME)*(closePercent/100.0), 2);
-   if(closeLots<SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MIN)) closeLots=SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MIN);
+   if(closeLots<SymbolInfoDouble(tSym,SYMBOL_VOLUME_MIN)) closeLots=SymbolInfoDouble(tSym,SYMBOL_VOLUME_MIN);
 
    // v11 (FEAT-016): لیست تیکت‌های باز قبل از Half Close - برای تشخیص تیکت جدیدی که MT4
    // ممکنه برای باقیمونده‌ی این پوزیشن بسازه (طبق کشف v8: تیکت اصلی بسته می‌شه و یک تیکت
@@ -844,7 +846,7 @@ bool HalfCloseTicket(ulong tkt, double closePercent, string reasonTag)
       if(candidate==tkt) continue;
       if(TicketInList(candidate, preTickets)) continue; // از قبل هم باز بود - جدید نیست
       if(!PositionSelectByTicket(candidate)) continue;
-      if(PositionGetInteger(POSITION_MAGIC)!=MagicNumber || PositionGetString(POSITION_SYMBOL)!=_Symbol) continue;
+      if(PositionGetInteger(POSITION_MAGIC)!=MagicNumber || PositionGetString(POSITION_SYMBOL)!=tSym) continue;   // v75.18
 
       // v40 (FEAT-019): این همون تیکت باقیمونده‌ست - صداکننده (مثل CheckAutoHalfCloseTrigger)
       // می‌تونه از روی این متغیر تشخیص بده و اگه لازمه وضعیت خودش رو هم به باقیمونده منتقل کنه.
@@ -911,7 +913,7 @@ bool HalfCloseTicket(ulong tkt, double closePercent, string reasonTag)
    return true;
 }
 
-void HalfClose(bool onlyProfitable)
+void HalfClose(bool onlyProfitable, bool chartOnly=false)
 {
    int n=0;
    for(int i=PositionsTotal()-1;i>=0;i--)
@@ -921,12 +923,13 @@ void HalfClose(bool onlyProfitable)
       if(PositionGetInteger(POSITION_MAGIC)!=MagicNumber) continue;
       long posType=PositionGetInteger(POSITION_TYPE);
       if(posType!=POSITION_TYPE_BUY && posType!=POSITION_TYPE_SELL) continue;
+      if(chartOnly && PositionGetString(POSITION_SYMBOL)!=_Symbol) continue;   // v75.18: ACTIVE CHART
       if(onlyProfitable && PositionGetDouble(POSITION_PROFIT)<=0) continue;
 
       // v40: درصد 50 هاردکد شده - همون رفتار قدیمی تک‌کلیکی، بدون هیچ تغییری
       if(HalfCloseTicket(tk, 50.0, "Half Close")) n++;
    }
-   string halfTag = onlyProfitable ? "Half Profit: " : "Half: ";
+   string halfTag = chartOnly ? "Half Chart: " : (onlyProfitable ? "Half Profit: " : "Half: ");
    SetStatus(halfTag+IntegerToString(n)+" trades",clrYellow);
    StartButtonFlash(P+"BTN_HALF", CLR_FLASH_HALF, g_halfFlashEnd);  // v30 (Button Click Feedback)
 }
@@ -1153,18 +1156,12 @@ void OpenHalfCloseMenu()
    int mx1 = g_halfCloseMenuAnchorX + mw + CLOSE_GRID_GAP;
    int my0 = g_halfCloseMenuAnchorY;
 
-   BtnC(P+"SUB_HALFALL",    mx0, my0, mw, mh, "Half Close All", TH_CL_CHART, corner, 8);
-   BtnC(P+"SUB_HALFPROFIT", mx1, my0, mw, mh, "Profitable Only", TH_CL_WIN, corner, 8);
-
-   // v59 (Item 1 - Trade Identification): وقتی ۲ یا بیشتر معامله روی همین نماد باز باشه، یه ردیف
-   // سوم زیر همون دو دکمه‌ی قبلی (تمام‌عرض، مثل ردیف‌های BuildTagWindow) اضافه می‌شه - انتخاب یک
-   // تیکت مشخص، به‌جای "همه"/"همه‌ی سودده". کمتر از ۲ معامله = این ردیف اصلاً ساخته نمی‌شه (طبق
-   // مشخصات تسک، UI فقط وقتی لازمه که واقعاً چند تیکت برای انتخاب وجود داشته باشه).
-   if(CountSymbolOpenTickets()>=2)
-   {
-      int my1 = my0 + mh + CLOSE_GRID_GAP;
-      BtnC(P+"SUB_HALFSELECT", mx0, my1, g_halfCloseMenuAnchorW, mh, "Select Trade", TH_CL_SEL, corner, 8);
-   }
+   // v75.18 (MT4 v111): گرید 2x2 - HALF ALL | ACTIVE CHART / HALF WINNERS | BY TRADE (همیشه در دسترس)
+   int my1 = my0 + mh + CLOSE_GRID_GAP;
+   BtnC(P+"SUB_HALFALL",    mx0, my0, mw, mh, "HALF ALL",      TH_CL_ALL,   corner, 8);
+   BtnC(P+"SUB_HALFCHART",  mx1, my0, mw, mh, "ACTIVE CHART",  TH_CL_CHART, corner, 8);
+   BtnC(P+"SUB_HALFPROFIT", mx0, my1, mw, mh, "HALF WINNERS",  TH_CL_WIN,   corner, 8);
+   BtnC(P+"SUB_HALFSELECT", mx1, my1, mw, mh, "BY TRADE",      TH_CL_SEL,   corner, 8);
 
    if(g_themeId!=RM_THEME_MONO) GreyOutPanel("BTN_HALF");   // v110 P4: در تم Mono پنل خاکستری نمی‌شود
    ChartRedraw();
@@ -1174,6 +1171,7 @@ void CloseHalfCloseMenu()
 {
    ObjectDelete(0, P+"SUB_HALFALL");
    ObjectDelete(0, P+"SUB_HALFPROFIT");
+   ObjectDelete(0, P+"SUB_HALFCHART");   // v75.18
    ObjectDelete(0, P+"SUB_HALFSELECT");  // v59 (Item 1): سومین دکمه‌ی زیرمنو، اگه ساخته شده باشه
    g_halfCloseMenuOpen = false;
 
@@ -1235,14 +1233,12 @@ void BuildHalfSelectWindow()
    string labels[];
    int cnt = 0;
 
-   double ask=SymbolInfoDouble(_Symbol,SYMBOL_ASK), bid=SymbolInfoDouble(_Symbol,SYMBOL_BID);
    int total=PositionsTotal();
    for(int i=0;i<total;i++)
    {
       ulong tk=PositionGetTicket(i);
       if(!PositionSelectByTicket(tk)) continue;
       if(PositionGetInteger(POSITION_MAGIC)!=MagicNumber) continue;
-      if(PositionGetString(POSITION_SYMBOL)!=_Symbol) continue;
       long posType=PositionGetInteger(POSITION_TYPE);
       if(posType!=POSITION_TYPE_BUY && posType!=POSITION_TYPE_SELL) continue;
 
@@ -1251,7 +1247,8 @@ void BuildHalfSelectWindow()
       double op     = PositionGetDouble(POSITION_PRICE_OPEN);
       double sl     = PositionGetDouble(POSITION_SL);
       double slDist = MathAbs(op-sl);
-      double curPr  = buy ? bid : ask;
+      string psym   = PositionGetString(POSITION_SYMBOL);   // v75.18: قیمت از نماد خود پوزیشن
+      double curPr  = buy ? SymbolInfoDouble(psym,SYMBOL_BID) : SymbolInfoDouble(psym,SYMBOL_ASK);
       string rTxt   = "N/A";
       if(slDist>0)
       {
@@ -1264,8 +1261,9 @@ void BuildHalfSelectWindow()
       string tagStrat = GetTagStrategy(tkt);
       string tagTxt   = (tagStrat!="N/A") ? tagStrat : PositionGetString(POSITION_COMMENT);
 
-      string lbl = "#"+IntegerToString(tkt)+" "+(buy?"BUY":"SELL")+" "+DoubleToString(PositionGetDouble(POSITION_VOLUME),2)+
-                   " | "+tagTxt+" | "+rTxt;
+      // (R حذف شد؛ فلش ▲/▼ در MT4 نمایش داده نمی‌شد - برگشت به BUY/SELL)
+      string lbl = psym+" "+(buy?"BUY":"SELL")+" "+DoubleToString(PositionGetDouble(POSITION_VOLUME),2)+
+                   " | #"+IntegerToString(tkt);   // v75.18: متن کوتاه
 
       ArrayResize(labels, cnt+1);
       ArrayResize(g_halfSelTickets, cnt+1);
@@ -1305,7 +1303,7 @@ void BuildHalfSelectWindow()
    {
       for(int r=0;r<cnt;r++)
       {
-         BtnC(HALFSEL_WIN_PREFIX+"ROW_"+IntegerToString(r), winX, cy, winW, rowH, labels[r], TH_ROW, corner, 7);
+         BtnC(HALFSEL_WIN_PREFIX+"ROW_"+IntegerToString(r), winX, cy, winW, rowH, labels[r], TH_ROW, corner, 8);
          cy += rowH + pad;
       }
    }

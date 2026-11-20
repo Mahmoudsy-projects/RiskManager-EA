@@ -1011,7 +1011,7 @@
 //|   MagicNumber and base sizing untouched.                          |
 //+------------------------------------------------------------------+
 #property copyright "Risk Manager EA"
-#property version   "110.00"
+#property version   "111.00"
 // v45 (Punch List Round 3, Item 7): custom icon embedded straight into the compiled .ex4 - shows
 // up in the Navigator panel and the Properties/About dialog. RiskManager.ico must sit next to this
 // .mq4 at compile time only; after that it's baked into the .ex4, no external file needed at runtime.
@@ -2369,7 +2369,8 @@ void RM_OnChartEventImpl(const int id, const long &lp, const double &dp, const s
          sp!=P+"SUB_CLOSECHART" && sp!=P+"SUB_CLOSEPROFIT" && sp!=P+"SUB_CLOSELOSS")
          CloseFullCloseMenu();
 
-      if(g_halfCloseMenuOpen && sp!=P+"BTN_HALF" && sp!=P+"SUB_HALFALL" && sp!=P+"SUB_HALFPROFIT")
+      if(g_halfCloseMenuOpen && sp!=P+"BTN_HALF" && sp!=P+"SUB_HALFALL" &&
+         sp!=P+"SUB_HALFCHART" && sp!=P+"SUB_HALFPROFIT" && sp!=P+"SUB_HALFSELECT")
          CloseHalfCloseMenu();
 
       if(sp == P+"BTN_MIN")
@@ -2459,6 +2460,7 @@ void RM_OnChartEventImpl(const int id, const long &lp, const double &dp, const s
          else                    OpenHalfCloseMenu();
       }
       if(sp==P+"SUB_HALFALL")      { CloseHalfCloseMenu(); HalfClose(false); }
+      if(sp==P+"SUB_HALFCHART")    { CloseHalfCloseMenu(); HalfClose(false, true); }   // v111
       if(sp==P+"SUB_HALFPROFIT")   { CloseHalfCloseMenu(); HalfClose(true); }
       // v59 (Item 1 - Trade Identification): دکمه‌ی سوم زیرمنو - پنجره‌ی انتخاب تک‌تیکت رو باز می‌کنه
       if(sp==P+"SUB_HALFSELECT")   { CloseHalfCloseMenu(); OpenHalfSelectWindow(); }

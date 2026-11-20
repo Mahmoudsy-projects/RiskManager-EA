@@ -762,7 +762,8 @@ void OnChartEvent(const int id, const long &lp, const double &dp, const string &
          sp!=P+"SUB_CLOSECHART" && sp!=P+"SUB_CLOSEPROFIT" && sp!=P+"SUB_CLOSELOSS")
          CloseFullCloseMenu();  // real, Stage 3
 
-      if(g_halfCloseMenuOpen && sp!=P+"BTN_HALF" && sp!=P+"SUB_HALFALL" && sp!=P+"SUB_HALFPROFIT")
+      if(g_halfCloseMenuOpen && sp!=P+"BTN_HALF" && sp!=P+"SUB_HALFALL" &&
+         sp!=P+"SUB_HALFCHART" && sp!=P+"SUB_HALFPROFIT" && sp!=P+"SUB_HALFSELECT")
          CloseHalfCloseMenu();  // real, Stage 3
 
       if(sp == P+"BTN_MIN")
@@ -839,6 +840,7 @@ void OnChartEvent(const int id, const long &lp, const double &dp, const string &
          else                    OpenHalfCloseMenu();   // real, Stage 3
       }
       if(sp==P+"SUB_HALFALL")      { CloseHalfCloseMenu(); HalfClose(false); }
+      if(sp==P+"SUB_HALFCHART")    { CloseHalfCloseMenu(); HalfClose(false, true); }   // v75.18
       if(sp==P+"SUB_HALFPROFIT")   { CloseHalfCloseMenu(); HalfClose(true); }
       if(sp==P+"SUB_HALFSELECT")   { CloseHalfCloseMenu(); OpenHalfSelectWindow(); }  // real, Stage 3
 
