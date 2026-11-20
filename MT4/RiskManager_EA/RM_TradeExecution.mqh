@@ -697,7 +697,7 @@ bool HalfCloseTicket(int tkt, double closePercent, string reasonTag)
    return true;
 }
 
-void HalfClose(bool onlyProfitable)
+void HalfClose(bool onlyProfitable, bool chartOnly=false)
 {
    int n=0;
    for(int i=OrdersTotal()-1;i>=0;i--)
@@ -705,12 +705,13 @@ void HalfClose(bool onlyProfitable)
       if(!OrderSelect(i,SELECT_BY_POS,MODE_TRADES)) continue;
       if(OrderMagicNumber()!=MagicNumber) continue;
       if(OrderType()!=OP_BUY&&OrderType()!=OP_SELL) continue;
+      if(chartOnly && OrderSymbol()!=Symbol()) continue;   // v111: Half Chart - فقط نماد چارت جاری
       if(onlyProfitable && OrderProfit()<=0) continue;
 
       // v40: درصد 50 هاردکد شده - همون رفتار قدیمی تک‌کلیکی، بدون هیچ تغییری
       if(HalfCloseTicket(OrderTicket(), 50.0, "Half Close")) n++;
    }
-   string halfTag = onlyProfitable ? "Half Profit: " : "Half: ";
+   string halfTag = chartOnly ? "Half Chart: " : (onlyProfitable ? "Half Profit: " : "Half: ");
    SetStatus(halfTag+IntegerToString(n)+" trades",clrYellow);
    StartButtonFlash(P+"BTN_HALF", CLR_FLASH_HALF, g_halfFlashEnd);  // v30 (Button Click Feedback)
 }
@@ -1035,18 +1036,14 @@ void OpenHalfCloseMenu()
    int mx1 = g_halfCloseMenuAnchorX + mw + CLOSE_GRID_GAP;
    int my0 = g_halfCloseMenuAnchorY;
 
-   BtnC(P+"SUB_HALFALL",    mx0, my0, mw, mh, "Half Close All", TH_CL_CHART, corner, 8);
-   BtnC(P+"SUB_HALFPROFIT", mx1, my0, mw, mh, "Profitable Only", TH_CL_WIN, corner, 8);
-
-   // v59 (Item 1 - Trade Identification): وقتی ۲ یا بیشتر معامله روی همین نماد باز باشه، یه ردیف
-   // سوم زیر همون دو دکمه‌ی قبلی (تمام‌عرض، مثل ردیف‌های BuildTagWindow) اضافه می‌شه - انتخاب یک
-   // تیکت مشخص، به‌جای "همه"/"همه‌ی سودده". کمتر از ۲ معامله = این ردیف اصلاً ساخته نمی‌شه (طبق
-   // مشخصات تسک، UI فقط وقتی لازمه که واقعاً چند تیکت برای انتخاب وجود داشته باشه).
-   if(CountSymbolOpenTickets()>=2)
-   {
-      int my1 = my0 + mh + CLOSE_GRID_GAP;
-      BtnC(P+"SUB_HALFSELECT", mx0, my1, g_halfCloseMenuAnchorW, mh, "Select Trade", TH_CL_SEL, corner, 8);
-   }
+   // v111: منوی Half Close شبیه Full Close به گرید 2x2 تبدیل شد:
+   //   Half All (کل حساب) | Half Chart (فقط این نماد)
+   //   Profitable Only    | By Trade (انتخاب تیکت - همیشه در دسترس)
+   int my1 = my0 + mh + CLOSE_GRID_GAP;
+   BtnC(P+"SUB_HALFALL",    mx0, my0, mw, mh, "HALF ALL",    TH_CL_ALL, corner, 8);
+   BtnC(P+"SUB_HALFCHART",  mx1, my0, mw, mh, "HALF CHART",  TH_CL_CHART, corner, 8);
+   BtnC(P+"SUB_HALFPROFIT", mx0, my1, mw, mh, "HALF WINNERS", TH_CL_WIN, corner, 8);
+   BtnC(P+"SUB_HALFSELECT", mx1, my1, mw, mh, "BY TRADE",    TH_CL_SEL, corner, 8);
 
    if(g_themeId!=RM_THEME_MONO) GreyOutPanel("BTN_HALF");   // v110 P4: در تم Mono پنل خاکستری نمی‌شود
    ChartRedraw();
@@ -1056,6 +1053,7 @@ void CloseHalfCloseMenu()
 {
    ObjectDelete(0, P+"SUB_HALFALL");
    ObjectDelete(0, P+"SUB_HALFPROFIT");
+   ObjectDelete(0, P+"SUB_HALFCHART");   // v111
    ObjectDelete(0, P+"SUB_HALFSELECT");  // v59 (Item 1): سومین دکمه‌ی زیرمنو، اگه ساخته شده باشه
    g_halfCloseMenuOpen = false;
 
