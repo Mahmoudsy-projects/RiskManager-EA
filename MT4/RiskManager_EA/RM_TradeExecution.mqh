@@ -569,7 +569,10 @@ bool HalfCloseTicket(int tkt, double closePercent, string reasonTag)
    bool buy   = (OrderType()==OP_BUY);
    double op  = OrderOpenPrice(), sl = OrderStopLoss();
    double slDist = MathAbs(op-sl);
-   double curPrice = buy?Bid:Ask;
+   // v111: قیمت/MinLot از نماد خودِ تیکت (نه چارت جاری) - تا Half Close روی نمادهای دیگر هم درست کار کند
+   string tSym = OrderSymbol();
+   double tBid = MarketInfo(tSym,MODE_BID), tAsk = MarketInfo(tSym,MODE_ASK);
+   double curPrice = buy?tBid:tAsk;
    bool reachedTP1 = (slDist>0) && (buy ? (curPrice>=op+slDist) : (curPrice<=op-slDist));
    if(reachedTP1) AddHalfExempt(OrderTicket());
 
@@ -579,7 +582,7 @@ bool HalfCloseTicket(int tkt, double closePercent, string reasonTag)
    string   symBefore      = OrderSymbol();
    datetime openTimeBefore = OrderOpenTime();
    double   closeLots = NormalizeDouble(OrderLots()*(closePercent/100.0), 2);
-   if(closeLots<MarketInfo(Symbol(),MODE_MINLOT)) closeLots=MarketInfo(Symbol(),MODE_MINLOT);
+   if(closeLots<MarketInfo(tSym,MODE_MINLOT)) closeLots=MarketInfo(tSym,MODE_MINLOT);
 
    // v11 (FEAT-016): لیست تیکت‌های باز قبل از Half Close - برای تشخیص تیکت جدیدی که MT4
    // ممکنه برای باقیمونده‌ی این پوزیشن بسازه (طبق کشف v8: تیکت اصلی بسته می‌شه و یک تیکت
@@ -587,7 +590,7 @@ bool HalfCloseTicket(int tkt, double closePercent, string reasonTag)
    int preTickets[];
    CaptureOpenTickets(preTickets);
 
-   if(!OrderClose(tkt,closeLots,buy?Bid:Ask,Slippage,clrYellow)) return false;
+   if(!OrderClose(tkt,closeLots,buy?tBid:tAsk,Slippage,clrYellow)) return false;
 
    // v18 (BUG-021): اگه این تیکت هرگز واقعاً به +1R نرسیده بود، این Half Close یک
    // اقدام مدیریتی زودهنگام حساب می‌شه - Behavior strike اضافه می‌شه.
@@ -603,7 +606,7 @@ bool HalfCloseTicket(int tkt, double closePercent, string reasonTag)
       if(candidate==tkt) continue;
       if(TicketInList(candidate, preTickets)) continue; // از قبل هم باز بود - جدید نیست
       if(!OrderSelect(candidate, SELECT_BY_TICKET)) continue;
-      if(OrderMagicNumber()!=MagicNumber || OrderSymbol()!=Symbol()) continue;
+      if(OrderMagicNumber()!=MagicNumber || OrderSymbol()!=symBefore) continue;   // v111: نماد خود تیکت
 
       // v40 (FEAT-019): این همون تیکت باقیمونده‌ست - صداکننده (مثل CheckAutoHalfCloseTrigger)
       // می‌تونه از روی این متغیر تشخیص بده و اگه لازمه وضعیت خودش رو هم به باقیمونده منتقل کنه.
@@ -1041,7 +1044,7 @@ void OpenHalfCloseMenu()
    //   Profitable Only    | By Trade (انتخاب تیکت - همیشه در دسترس)
    int my1 = my0 + mh + CLOSE_GRID_GAP;
    BtnC(P+"SUB_HALFALL",    mx0, my0, mw, mh, "HALF ALL",    TH_CL_ALL, corner, 8);
-   BtnC(P+"SUB_HALFCHART",  mx1, my0, mw, mh, "HALF CHART",  TH_CL_CHART, corner, 8);
+   BtnC(P+"SUB_HALFCHART",  mx1, my0, mw, mh, "ACTIVE CHART",  TH_CL_CHART, corner, 8);
    BtnC(P+"SUB_HALFPROFIT", mx0, my1, mw, mh, "HALF WINNERS", TH_CL_WIN, corner, 8);
    BtnC(P+"SUB_HALFSELECT", mx1, my1, mw, mh, "BY TRADE",    TH_CL_SEL, corner, 8);
 
@@ -1116,7 +1119,6 @@ void BuildHalfSelectWindow()
    {
       if(!OrderSelect(i,SELECT_BY_POS,MODE_TRADES)) continue;
       if(OrderMagicNumber()!=MagicNumber) continue;
-      if(OrderSymbol()!=Symbol()) continue;
       if(OrderType()!=OP_BUY && OrderType()!=OP_SELL) continue;
 
       int    tkt    = OrderTicket();
@@ -1124,7 +1126,7 @@ void BuildHalfSelectWindow()
       double op     = OrderOpenPrice();
       double sl     = OrderStopLoss();
       double slDist = MathAbs(op-sl);
-      double curPr  = buy ? Bid : Ask;
+      double curPr  = buy ? MarketInfo(OrderSymbol(),MODE_BID) : MarketInfo(OrderSymbol(),MODE_ASK);   // v111: نماد خود تیکت
       string rTxt   = "N/A";
       if(slDist>0)
       {
@@ -1137,7 +1139,7 @@ void BuildHalfSelectWindow()
       string tagStrat = GetTagStrategy(tkt);
       string tagTxt   = (tagStrat!="N/A") ? tagStrat : OrderComment();
 
-      string lbl = "#"+IntegerToString(tkt)+" "+(buy?"BUY":"SELL")+" "+DoubleToString(OrderLots(),2)+
+      string lbl = "#"+IntegerToString(tkt)+" "+OrderSymbol()+" "+(buy?"BUY":"SELL")+" "+DoubleToString(OrderLots(),2)+
                    " | "+tagTxt+" | "+rTxt;
 
       ArrayResize(labels, cnt+1);

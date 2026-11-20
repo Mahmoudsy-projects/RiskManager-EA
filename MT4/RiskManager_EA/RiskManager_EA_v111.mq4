@@ -1011,7 +1011,7 @@
 //|   MagicNumber and base sizing untouched.                          |
 //+------------------------------------------------------------------+
 #property copyright "Risk Manager EA"
-#property version   "110.00"
+#property version   "111.00"
 // v45 (Punch List Round 3, Item 7): custom icon embedded straight into the compiled .ex4 - shows
 // up in the Navigator panel and the Properties/About dialog. RiskManager.ico must sit next to this
 // .mq4 at compile time only; after that it's baked into the .ex4, no external file needed at runtime.

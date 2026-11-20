@@ -14,7 +14,7 @@ A risk-management and trade-discipline toolkit for MetaTrader. It is **not** a t
 2026-11-19: MT4 EA **v110**, MT4 Hub **1.23**, MT5 EA **v75.17** and MT5 Hub **1.17** were compiled and tested by Mahmoud (confirmed by the author; see `New-Graphic-Design/CHANGELOG.md`).
 
 ## Install (MT4)
-1. Copy the contents of `MT4/RiskManager_EA/` to `MQL4/Experts/RiskManager_EA/` and compile `RiskManager_EA_v110.mq4` in MetaEditor.
+1. Copy the contents of `MT4/RiskManager_EA/` to `MQL4/Experts/RiskManager_EA/` and compile `RiskManager_EA_v111.mq4` in MetaEditor.
 2. Copy `Hub/` to `MQL4/Indicators/` and compile `ExecutiveHub_v1.23.mq4`.
 3. Copy `MT4/MQL4_Files/RM_StrategySetups.txt` to `MQL4/Files/` (the EA migrates an older list once and keeps a backup).
 
@@ -26,7 +26,7 @@ A risk-management and trade-discipline toolkit for MetaTrader. It is **not** a t
 
 ## Docs
 - `docs/changelogs/` — one changelog per version (Persian).
-- `docs/guide/` — Persian user guides. MT4: `..._MT4_v110_Hub1.23.pdf` (latest, Mono Gray); MT5: `..._MT5_v75.17_Hub1.17.pdf` (latest). Older PDFs are kept for history.
+- `docs/guide/` — Persian user guides. MT4: `..._MT4_v110_Hub1.23.pdf` (Mono Gray; guide not yet updated for v111); MT5: `..._MT5_v75.17_Hub1.17.pdf` (latest). Older PDFs are kept for history.
 - `docs/reports/` — delivery reports.
 
 ## Tags
