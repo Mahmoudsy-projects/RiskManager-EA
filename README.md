@@ -26,7 +26,7 @@ A risk-management and trade-discipline toolkit for MetaTrader. It is **not** a t
 
 ## Docs
 - `docs/changelogs/` — one changelog per version (Persian).
-- `docs/guide/` — Persian user guides. MT4: `..._MT4_v110_Hub1.23.pdf` (Mono Gray; guide not yet updated for v111); MT5: `..._MT5_v75.17_Hub1.17.pdf` (latest). Older PDFs are kept for history.
+- Persian user guides: [MT4 v111 / Hub 1.23](docs/guide/RiskManager_Workstation_UserGuide_FA_MT4_v111_Hub1.23.pdf) and [MT5 v75.17 / Hub 1.17](docs/guide/RiskManager_Workstation_UserGuide_FA_MT5_v75.17_Hub1.17.pdf). Older PDFs are kept for history.
 - `docs/reports/` — delivery reports.
 
 ## Tags
