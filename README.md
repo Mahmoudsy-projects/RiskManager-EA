@@ -11,7 +11,7 @@ A risk-management and trade-discipline toolkit for MetaTrader. It is **not** a t
 | Executive Hub (indicator) | MT5 | v1.17 | `MT5/ExecutiveHub_MT5/` |
 
 ## Status
-2026-11-22: MT4 EA **v111** is the latest source version (Half Close BY TRADE / ACTIVE CHART updates). The last explicitly documented compile-and-test confirmation remains MT4 v110 on 2026-11-19; v111 test status is not independently recorded in this README. MT4 Hub **1.23**, MT5 EA **v75.17** and MT5 Hub **1.17** were compiled and tested by Mahmoud on 2026-11-19 (confirmed by the author; see `New-Graphic-Design/CHANGELOG.md`).
+2026-11-22: MT4 EA **v111** is the latest version (Half Close BY TRADE / ACTIVE CHART updates), **compiled, tested, and in daily use**, as explicitly confirmed by Mahmoud on 2026-11-22. MT4 Hub **1.23**, MT5 EA **v75.17** and MT5 Hub **1.17** were compiled and tested by Mahmoud on 2026-11-19 (confirmed by the author; see `New-Graphic-Design/CHANGELOG.md`).
 
 ## Install (MT4)
 1. Copy the contents of `MT4/RiskManager_EA/` to `MQL4/Experts/RiskManager_EA/` and compile `RiskManager_EA_v111.mq4` in MetaEditor.
