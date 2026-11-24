@@ -1012,7 +1012,7 @@ void UpdateKeyTimeWindow(bool refresh=false)
 
    ArrayResize(g_swBoxNames, 2);
    ArrayResize(g_swLblNames, 2);
-   datetime server[2];
+   datetime server[2] = {0, 0};
    for(int i=0; i<2; i++)
    {
       server[i] = utc[i] + ST_ServerOffsetForUtc(utc[i]);
