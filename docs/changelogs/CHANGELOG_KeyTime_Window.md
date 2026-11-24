@@ -1,4 +1,4 @@
-# Key Time WINDOW mode
+# Key Time WINDOW mode — MT4 v112 and MT5 v75.19
 
 MT4 and MT5 now cycle through OFF → FULL → COMPACT → WINDOW → OFF. The button shows `KEY TIME W` while WINDOW is active, and the status shows `Key Time: ON (WINDOW)`.
 
