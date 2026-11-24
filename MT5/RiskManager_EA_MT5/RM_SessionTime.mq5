@@ -263,7 +263,7 @@ int ST_ServerOffsetForUtc(datetime utcInstant)
 // یک روز تقویمی نیویورک (y/m/d) + شروع/پایان به وقت نیویورک -> بازه به وقت سرور. end<=start = رد از نیمه‌شب.
 void ST_ComputeSessionServerTime(int y, int m, int d,
                                  int nyStartH, int nyStartM, int nyEndH, int nyEndM,
-                                 datetime &outStart, datetime &outEnd)
+                                 datetime &outStart, datetime &outEnd, bool asUtc=false)
 {
    datetime nyMidnightRaw = StringToTime(StringFormat("%04d.%02d.%02d 00:00", y, m, d));
    bool dst = ST_IsUSDST(nyMidnightRaw + 12 * 3600);
@@ -275,25 +275,25 @@ void ST_ComputeSessionServerTime(int y, int m, int d,
 
    datetime utcStartRaw = nyStartRaw - nyOffsetSec;
    datetime utcEndRaw   = nyEndRaw   - nyOffsetSec;
-   outStart = utcStartRaw + ST_ServerOffsetForUtc(utcStartRaw);
-   outEnd   = utcEndRaw   + ST_ServerOffsetForUtc(utcEndRaw);
+   outStart = utcStartRaw + (asUtc ? 0 : ST_ServerOffsetForUtc(utcStartRaw));
+   outEnd   = utcEndRaw + (asUtc ? 0 : ST_ServerOffsetForUtc(utcEndRaw));
 }
 
 void ST_ComputeSessionByDaysAgo(int daysAgo,
                                 int nyStartH, int nyStartM, int nyEndH, int nyEndM,
-                                datetime &outStart, datetime &outEnd)
+                                datetime &outStart, datetime &outEnd, bool asUtc=false)
 {
    int y, m, d;
    ST_GetNYCalendarDate(daysAgo, y, m, d);
-   ST_ComputeSessionServerTime(y, m, d, nyStartH, nyStartM, nyEndH, nyEndM, outStart, outEnd);
+   ST_ComputeSessionServerTime(y, m, d, nyStartH, nyStartM, nyEndH, nyEndM, outStart, outEnd, asUtc);
 }
 
 // نسخه‌ی market-aware: ساعت شروع/پایان = ساعت محلی بازار روی روز تقویمی y/m/d؛ DST همان بازار در همان لحظه.
 void ST_ComputeSessionServerTimeMkt(int market, int y, int m, int d,
                                     int sH, int sM, int eH, int eM,
-                                    datetime &outStart, datetime &outEnd)
+                                    datetime &outStart, datetime &outEnd, bool asUtc=false)
 {
-   if(market == ST_MKT_NY) { ST_ComputeSessionServerTime(y, m, d, sH, sM, eH, eM, outStart, outEnd); return; }
+   if(market == ST_MKT_NY) { ST_ComputeSessionServerTime(y, m, d, sH, sM, eH, eM, outStart, outEnd, asUtc); return; }
 
    datetime midRaw   = StringToTime(StringFormat("%04d.%02d.%02d 00:00", y, m, d));
    datetime startRaw = midRaw + sH * 3600 + sM * 60;
@@ -302,17 +302,17 @@ void ST_ComputeSessionServerTimeMkt(int market, int y, int m, int d,
 
    datetime utcStart = ST_MarketLocalToUtc(market, startRaw);
    datetime utcEnd   = ST_MarketLocalToUtc(market, endRaw);
-   outStart = utcStart + ST_ServerOffsetForUtc(utcStart);
-   outEnd   = utcEnd   + ST_ServerOffsetForUtc(utcEnd);
+   outStart = utcStart + (asUtc ? 0 : ST_ServerOffsetForUtc(utcStart));
+   outEnd   = utcEnd + (asUtc ? 0 : ST_ServerOffsetForUtc(utcEnd));
 }
 
 void ST_ComputeSessionByDaysAgoMkt(int daysAgo, int market,
                                    int sH, int sM, int eH, int eM,
-                                   datetime &outStart, datetime &outEnd)
+                                   datetime &outStart, datetime &outEnd, bool asUtc=false)
 {
    int y, m, d;
    ST_GetNYCalendarDate(daysAgo, y, m, d);
-   ST_ComputeSessionServerTimeMkt(market, y, m, d, sH, sM, eH, eM, outStart, outEnd);
+   ST_ComputeSessionServerTimeMkt(market, y, m, d, sH, sM, eH, eM, outStart, outEnd, asUtc);
 }
 
 #endif

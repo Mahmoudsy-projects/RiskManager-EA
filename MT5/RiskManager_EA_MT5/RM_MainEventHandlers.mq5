@@ -243,6 +243,7 @@ void OnTimer()
    SyncTagsIfChanged();           // v75.0 (P0، MT4 v101 RM_SyncTagsIfChanged): یک GlobalVariableGet؛ فایل فقط وقتی چارت دیگر تگ ذخیره کرده دوباره خوانده می‌شود
    ST_ServerOffsetSec();          // v75.0 (P0-1): کالیبراسیون سه‌تیکی آفست (MT5 مصرف‌کننده‌ی دوره‌ای مثل News در MT4 ندارد)
    CheckAutoCloseAtHour();        // v75.4 (FEAT-031): با EnableAutoCloseAtHour=false دقیقاً no-op
+   UpdateKeyTimeWindow();
    RM_NewsTick();                 // v75.3 (MT4 v105): خبر USD؛ throttle ۲۰ث، فقط وقتی KEY TIME روشن است، دانلود ساعتی با WebRequest
    RM_GVFlushIfDirty();           // v74.6 (HF6b): فقط اگه MaxFav/MinFav عوض شده و ≥15s از flush قبلی گذشته
    CancelOrphanContinuationPendings();   // v75.13 (MT4 v90.1): روی نمادهای کم‌تیک هم
@@ -948,14 +949,16 @@ void OnChartEvent(const int id, const long &lp, const double &dp, const string &
       }
       if(sp == P+"BTN_SW")
       {
-         // v75.1 (MT4 v107 FEAT-061): چرخه OFF -> FULL -> COMPACT -> OFF
          if(!g_swOn)                               { g_swOn = true;  g_swMode = KEYTIME_MODE_FULL; }
          else if(g_swMode == KEYTIME_MODE_FULL)    { g_swMode = KEYTIME_MODE_COMPACT; }
+         else if(g_swMode == KEYTIME_MODE_COMPACT) { g_swMode = KEYTIME_MODE_WINDOW; }
          else                                      { g_swOn = false; g_swMode = KEYTIME_MODE_FULL; }
          SaveSessionWindowsState();
          BuildSessionWindows();      // ON: (re)builds; OFF: RemoveSessionWindows و برمی‌گردد
          UpdateSWButton();
-         SetStatus(g_swOn ? (g_swMode == KEYTIME_MODE_COMPACT ? "Key Time: ON (COMPACT)" : "Key Time: ON (FULL)") : "Key Time: OFF", C'150,160,180');
+         string modeName = (g_swMode == KEYTIME_MODE_WINDOW) ? "WINDOW" :
+                           (g_swMode == KEYTIME_MODE_COMPACT) ? "COMPACT" : "FULL";
+         SetStatus(g_swOn ? "Key Time: ON (" + modeName + ")" : "Key Time: OFF", C'150,160,180');
       }
       if(sp == P+"BTN_SESSLVL")
       {

@@ -5,7 +5,7 @@
 //| No stubs remain anywhere in this build.                          |
 //+------------------------------------------------------------------+
 #property copyright   "Risk Manager EA"
-#property version     "75.18"   // v75.14 (FEAT-037 چک‌لیست کانتکست - P5). v75.13 (Scale-in + ریشه‌ی زنجیره + FEAT-045 خط ریسک)
+#property version     "75.19"   // v75.14 (FEAT-037 چک‌لیست کانتکست - P5). v75.13 (Scale-in + ریشه‌ی زنجیره + FEAT-045 خط ریسک)
 #property description "A discipline enforcement engine, not a predictive tool."
 #property description "Focuses on what can be controlled: risk, behavior, execution."
 #property description "1. Mathematical: sizing, capital preservation, D/W/M limits, Emergency Stop."

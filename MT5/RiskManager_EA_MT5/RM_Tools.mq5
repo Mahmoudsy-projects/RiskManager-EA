@@ -451,12 +451,17 @@ string   g_swBoxNames[];
 string   g_swLblNames[];
 int      g_swObjCount = 0;
 datetime g_swCullTime = 0;   // v75.1 (MT4 v95): مرز چپ برای ساخت خطوط Key Time (۰ = بدون محدودیت)
-// v75.1 (MT4 v107 FEAT-061): حالت نمایش KEY TIME - 0=FULL (هر ۱۶ خط)، 1=COMPACT (فقط خطوط اصلی).
-// دکمه‌ی KEY TIME چرخه می‌زند: OFF -> FULL -> COMPACT -> OFF؛ در GlobalVariable ذخیره می‌شود.
+// KEY TIME cycles OFF -> FULL -> COMPACT -> WINDOW -> OFF.
 #define  KEYTIME_MODE_FULL     0
 #define  KEYTIME_MODE_COMPACT  1
+#define  KEYTIME_MODE_WINDOW   2
 int      g_swMode = KEYTIME_MODE_FULL;
 string   GV_SW_MODE = "RM_SWMode_" + _Symbol;
+datetime g_swWindowUtc[2];       // elapsed and upcoming, in that order
+datetime g_swWindowServer[2];
+int      g_swWindowLine[2];
+datetime g_swWindowLastCheck = 0;
+color    g_swWindowBackground;
 
 // [Stage 5d - THE flagged DST translation] IsUSDST_UTC(): formula/thresholds unchanged from the
 // original - only the source of each date component changed (TimeYear/TimeDayOfWeek, MT4-only ->
@@ -527,6 +532,7 @@ void GetSessionWindowPriceRange(double &priceTop, double &priceBot)
 
 void RemoveSessionWindows()
 {
+   g_swWindowUtc[1] = 0;
    RM_NewsRemove();   // v75.3 (MT4 v105): خطوط خبر USD هم با KEY TIME پاک می‌شوند
    for(int i=0; i<g_swObjCount; i++)
    {
@@ -587,22 +593,19 @@ color GetKeyTimeLineColor(bool isMain)
    return (color)(r | (g<<8) | (b<<16));
 }
 
-void BuildOneKeyTimeLine(int daysAgo, int lineIdx, int nyH, int nyM, bool isMain, color c, int mkt = ST_MKT_NY, int dayOffset = 0)
+datetime KeyTime_CalculateTime(int daysAgo, int h, int m, int mkt, int dayOffset, bool asUtc=false)
 {
-   // nyH/nyM = ساعت محلی بازار mkt. NY = مسیر قدیمی؛ بقیه market-aware.
    datetime t1, t2dummy;
    if(mkt == ST_MKT_NY)
-      ST_ComputeSessionByDaysAgo(daysAgo, nyH, nyM, nyH, nyM, t1, t2dummy);
+      ST_ComputeSessionByDaysAgo(daysAgo, h, m, h, m, t1, t2dummy, asUtc);
    else
-      ST_ComputeSessionByDaysAgoMkt(daysAgo - dayOffset, mkt, nyH, nyM, nyH, nyM, t1, t2dummy);
-   // MT4 v95 (BUG-059): خطوط کاملاً چپِ ناحیه‌ی دیده‌شده ساخته نمی‌شوند (اسکرول به عقب با CHART_CHANGE دوباره می‌سازد)
-   if(g_swCullTime > 0 && t1 < g_swCullTime) return;
+      ST_ComputeSessionByDaysAgoMkt(daysAgo - dayOffset, mkt, h, m, h, m, t1, t2dummy, asUtc);
+   return t1;
+}
+
+void DrawKeyTimeLine(string lineName, string lblName, datetime t1, bool isMain, color c)
+{
    SessionLevel_EnsureChartShift(t1);
-
-   string id       = KeyTime_Id(lineIdx);
-   string lineName = SW_BOX_PREFIX + id + "_" + IntegerToString(daysAgo);
-   string lblName  = SW_LBL_PREFIX + id + "_" + IntegerToString(daysAgo);
-
    double priceTop, priceBot;
    GetSessionWindowPriceRange(priceTop, priceBot);   // لنگر نزدیک پایین چارت برای لیبل
 
@@ -628,6 +631,17 @@ void BuildOneKeyTimeLine(int daysAgo, int lineIdx, int nyH, int nyM, bool isMain
    ObjectSetInteger(0,lblName,OBJPROP_ANCHOR, ANCHOR_LOWER);
    ObjectSetInteger(0,lblName,OBJPROP_SELECTABLE, false);
    ObjectSetInteger(0,lblName,OBJPROP_BACK,   false);
+}
+
+void BuildOneKeyTimeLine(int daysAgo, int lineIdx, int nyH, int nyM, bool isMain, color c, int mkt = ST_MKT_NY, int dayOffset = 0)
+{
+   datetime t1 = KeyTime_CalculateTime(daysAgo, nyH, nyM, mkt, dayOffset);
+   if(g_swCullTime > 0 && t1 < g_swCullTime) return;
+
+   string id = KeyTime_Id(lineIdx) + "_" + IntegerToString(daysAgo);
+   string lineName = SW_BOX_PREFIX + id;
+   string lblName = SW_LBL_PREFIX + id;
+   DrawKeyTimeLine(lineName, lblName, t1, isMain, c);
 
    ArrayResize(g_swBoxNames, g_swObjCount+1);
    ArrayResize(g_swLblNames, g_swObjCount+1);
@@ -636,8 +650,103 @@ void BuildOneKeyTimeLine(int daysAgo, int lineIdx, int nyH, int nyM, bool isMain
    g_swObjCount++;
 }
 
+// Compare UTC instants so a broker clock change cannot reverse their order.
+void UpdateKeyTimeWindow(bool refresh=false)
+{
+   if(!g_swOn || g_swMode != KEYTIME_MODE_WINDOW) return;
+
+   datetime now = ST_NowUTC();
+   bool select = g_swWindowUtc[1] == 0 || now >= g_swWindowUtc[1] || now < g_swWindowLastCheck;
+   // Check the broker-time mapping once per minute, or on a chart refresh.
+   if(!select && !refresh && now / 60 == g_swWindowLastCheck / 60) return;
+   g_swWindowLastCheck = now;
+
+   datetime utc[2] = {0, 0};
+   int line[2] = {0, 0};
+   if(select)
+   {
+      // Market-local dates can fall on either side of the NY calendar date.
+      // At coincident times, use the first line in the existing schedule (main first).
+      for(int daysAgo=-2; daysAgo<=2; daysAgo++)
+      {
+         for(int i=0; i<KEYTIME_LINE_COUNT; i++)
+         {
+            int h, m, dayOffset, mkt; bool isMain;
+            KeyTime_GetLine(i, h, m, isMain, dayOffset, mkt);
+            datetime candidate = KeyTime_CalculateTime(daysAgo+dayOffset, h, m, mkt, dayOffset, true);
+            int side = (candidate <= now) ? 0 : 1;
+            if(utc[side] == 0 || (side == 0 && candidate > utc[side]) ||
+               (side == 1 && candidate < utc[side]) ||
+               (candidate == utc[side] && i < line[side]))
+            {
+               utc[side] = candidate;
+               line[side] = i;
+            }
+         }
+      }
+      if(utc[0] == 0 || utc[1] == 0) return;
+   }
+   else
+   {
+      ArrayCopy(utc, g_swWindowUtc);
+      ArrayCopy(line, g_swWindowLine);
+   }
+
+   color background = (color)ChartGetInteger(0, CHART_COLOR_BACKGROUND);
+   bool changed = false;
+   for(int i=0; i<g_swObjCount; i++)
+   {
+      if((g_swWindowUtc[i] == utc[0] && g_swWindowLine[i] == line[0]) ||
+         (g_swWindowUtc[i] == utc[1] && g_swWindowLine[i] == line[1])) continue;
+      ObjectDelete(0, g_swBoxNames[i]);
+      ObjectDelete(0, g_swLblNames[i]);
+      changed = true;
+   }
+
+   ArrayResize(g_swBoxNames, 2);
+   ArrayResize(g_swLblNames, 2);
+   datetime server[2] = {0, 0};
+   for(int i=0; i<2; i++)
+   {
+      server[i] = utc[i] + ST_ServerOffsetForUtc(utc[i]);
+      int existing = -1;
+      for(int j=0; j<g_swObjCount; j++)
+      {
+         if(g_swWindowUtc[j] == utc[i] && g_swWindowLine[j] == line[i]) existing = j;
+      }
+      string id = KeyTime_Id(line[i]) + "_W_" + IntegerToString(utc[i]);
+      g_swBoxNames[i] = SW_BOX_PREFIX + id;
+      g_swLblNames[i] = SW_LBL_PREFIX + id;
+      if(existing >= 0 && server[i] == g_swWindowServer[existing] && background == g_swWindowBackground &&
+         (!refresh || (ObjectFind(0, g_swBoxNames[i]) >= 0 && ObjectFind(0, g_swLblNames[i]) >= 0))) continue;
+
+      int h, m, dayOffset, mkt; bool isMain;
+      KeyTime_GetLine(line[i], h, m, isMain, dayOffset, mkt);
+      DrawKeyTimeLine(g_swBoxNames[i], g_swLblNames[i], server[i], isMain, GetKeyTimeLineColor(isMain));
+      changed = true;
+   }
+   ArrayCopy(g_swWindowUtc, utc);
+   ArrayCopy(g_swWindowLine, line);
+   ArrayCopy(g_swWindowServer, server);
+   g_swObjCount = 2;
+   g_swWindowBackground = background;
+   if(refresh) SessionLevel_EnsureChartShift(server[1]);
+   else if(changed) ChartRedraw();
+}
+
 void BuildSessionWindows()
 {
+   if(g_swOn && g_swMode == KEYTIME_MODE_WINDOW)
+   {
+      if(g_swWindowUtc[1] == 0) RemoveSessionWindows();
+      g_swCullTime = 0;
+      UpdateKeyTimeWindow(true);
+      RM_NewsBuild();
+      UpdateSessionWindowsVertical(true);
+      ChartRedraw();
+      return;
+   }
+
    RemoveSessionWindows();
    if(!g_swOn) return;
 
@@ -666,13 +775,13 @@ void BuildSessionWindows()
 }
 
 // فقط موقعیت عمودی لیبل‌ها را با بازه‌ی قیمت دیده‌شده هماهنگ می‌کند (خط عمودی قیمت ندارد). حداکثر هر ۳ ثانیه.
-void UpdateSessionWindowsVertical()
+void UpdateSessionWindowsVertical(bool force=false)
 {
    if(!g_swOn || g_swObjCount<=0) return;
    static uint   swLastMs = 0;
    static double swLastMax = 0, swLastMin = 0;
    static int    swLastH = 0, swLastCnt = 0;
-   if((int)(GetTickCount() - swLastMs) < 3000) return;
+   if(!force && (int)(GetTickCount() - swLastMs) < 3000) return;
    swLastMs = GetTickCount();
    // MT4 v95: اگر کاربر بیشتر از مرز فعلی به عقب اسکرول کرده، خطوط قدیمی‌تر را دوباره بساز
    if(g_swCullTime > 0)
@@ -687,7 +796,7 @@ void UpdateSessionWindowsVertical()
    RM_NewsUpdateVertical();   // v75.3: لیبل‌های خبر با زوم/اسکرول پایین چارت بمانند
    double swMax = ChartGetDouble(0, CHART_PRICE_MAX), swMin = ChartGetDouble(0, CHART_PRICE_MIN);
    int    swH   = (int)ChartGetInteger(0, CHART_HEIGHT_IN_PIXELS);
-   if(swMax==swLastMax && swMin==swLastMin && swH==swLastH && g_swObjCount==swLastCnt) return;
+   if(!force && swMax==swLastMax && swMin==swLastMin && swH==swLastH && g_swObjCount==swLastCnt) return;
    swLastMax = swMax; swLastMin = swMin; swLastH = swH; swLastCnt = g_swObjCount;
    double priceTop, priceBot;
    GetSessionWindowPriceRange(priceTop, priceBot);
@@ -706,10 +815,14 @@ void SaveSessionWindowsState()
 
 void LoadSessionWindowsState()
 {
+   // Clear Key Time objects left on the chart after an unclean shutdown.
+   ObjectsDeleteAll(0, SW_BOX_PREFIX);
+   ObjectsDeleteAll(0, SW_LBL_PREFIX);
    if(GlobalVariableCheck(GV_SW_ON))
       g_swOn = (GlobalVariableGet(GV_SW_ON) != 0.0);
    // نبودن GV = FULL
-   g_swMode = (GlobalVariableCheck(GV_SW_MODE) && (int)GlobalVariableGet(GV_SW_MODE) == KEYTIME_MODE_COMPACT) ? KEYTIME_MODE_COMPACT : KEYTIME_MODE_FULL;
+   int savedMode = GlobalVariableCheck(GV_SW_MODE) ? (int)GlobalVariableGet(GV_SW_MODE) : KEYTIME_MODE_FULL;
+   g_swMode = (savedMode == KEYTIME_MODE_COMPACT || savedMode == KEYTIME_MODE_WINDOW) ? savedMode : KEYTIME_MODE_FULL;
 }
 
 //+------------------------------------------------------------------+

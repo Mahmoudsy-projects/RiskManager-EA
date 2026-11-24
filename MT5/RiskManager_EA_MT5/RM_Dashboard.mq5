@@ -1103,10 +1103,9 @@ void BuildPanel()
          BtnC(P+"BTN_SESSLVL", bx, cy, toolsHalfW1, TOOLS_ROW_H, slCap,
               g_sessLvlOn ? ((g_slMode == 1) ? TH_ACTIVE_ALT : TH_ACTIVE) : TH_BTN, corner, 8);
          FitBtnFontHalf(P+"BTN_SESSLVL", slCap, toolsHalfW1, 8);
-         // v107 (FEAT-061): (۱ = KEYTIME_MODE_COMPACT؛ ماکرو در RM_Tools بعد از این فایل تعریف می‌شود) COMPACT = کپشنِ «KEY TIME C» + رنگِ آبی‌-سبزِ متفاوت؛ FULL دقیقاً مثلِ قبل
-         string swCap = (g_swOn && g_swMode == 1) ? "KEY TIME C" : "KEY TIME";
+         string swCap = KeyTimeButtonCaption();
          BtnC(P+"BTN_SW", bx+toolsHalfW1+GP, cy, toolsHalfW2, TOOLS_ROW_H, swCap,
-              g_swOn ? ((g_swMode == 1) ? TH_ACTIVE_ALT : TH_ACTIVE) : TH_BTN, corner, 8);
+              KeyTimeButtonColor(), corner, 8);
          FitBtnFontHalf(P+"BTN_SW", swCap, toolsHalfW2, 8);
          cy += TOOLS_ROW_H + GP;
       }
@@ -1315,12 +1314,27 @@ void UpdateHistoryButton()
 // v54: same ON=teal/OFF=grey convention as UpdateCandleTimerButton()/UpdateBERefButton() above.
 // v57.1 (فیدبک Mahmoud - نام‌گذاری): کپشن از "SESSIONS" به "KEY TIME" تغییر کرد - خودِ توگل/گلوبال
 // (g_swOn) دست‌نخورده.
+string KeyTimeButtonCaption()
+{
+   // RM_Tools is included after this file (1 = COMPACT, 2 = WINDOW).
+   if(g_swOn && g_swMode == 2) return "KEY TIME W";
+   if(g_swOn && g_swMode == 1) return "KEY TIME C";
+   return "KEY TIME";
+}
+
+color KeyTimeButtonColor()
+{
+   return g_swOn ? (g_swMode != 0 ? TH_ACTIVE_ALT : TH_ACTIVE) : TH_BTN;
+}
+
 void UpdateSWButton()
 {
-   if(ObjectFind(0,P+"BTN_SW")<0) return;
-   bool swCompact = (g_swOn && g_swMode == 1);
-   BtnBg(P+"BTN_SW", g_swOn ? (swCompact ? TH_ACTIVE_ALT : TH_ACTIVE) : TH_BTN);
-   ObjectSetString (0,P+"BTN_SW",OBJPROP_TEXT,   swCompact ? "KEY TIME C" : "KEY TIME");
+   string button = P+"BTN_SW";
+   if(ObjectFind(0,button)<0) return;
+   string caption = KeyTimeButtonCaption();
+   BtnBg(button, KeyTimeButtonColor());
+   ObjectSetString(0,button,OBJPROP_TEXT, caption);
+   FitBtnFontHalf(button, caption, (int)ObjectGetInteger(0,button,OBJPROP_XSIZE), 8);
    ChartRedraw();
 }
 

@@ -144,6 +144,11 @@ int ST_InputRuleOffsetAtUtc(datetime utcInstant)
    return(ST_IsUSDST(utcInstant) ? summer : summer - 3600);
 }
 
+datetime ST_NowUTC()
+{
+   return IsTesting() ? (TimeCurrent() - ST_ServerOffsetSec()) : TimeGMT();
+}
+
 //+------------------------------------------------------------------+
 //| تاریخِ تقویمیِ نیویورک برای daysAgo روز قبل از امروز.                |
 //| daysAgo منفی = آینده (امروز/فردا) — عمداً پشتیبانی می‌شود چون بعضی   |
@@ -157,7 +162,7 @@ void ST_GetNYCalendarDate(int daysAgo, int &y, int &m, int &d)
    // شبیه‌سازی‌شده‌ی تستر)، پس «الان»ِ نیویورک غلط محاسبه می‌شد و باکس‌ها روی تاریخِ اشتباه می‌افتادند
    // یا اصلاً دیتا پیدا نمی‌شد. در تستر «الان»ِ UTC را از TimeCurrent() (زمانِ شبیه‌سازیِ سرور) منهای
    // آفست می‌سازیم. در حالتِ زنده همان TimeGMT() (که همیشه جاری است) دست‌نخورده می‌ماند.
-   datetime nowUTC = IsTesting() ? (TimeCurrent() - ST_ServerOffsetSec()) : TimeGMT();
+   datetime nowUTC = ST_NowUTC();
    bool nowDst = ST_IsUSDST(nowUTC);
    int  nowNyOffSec = nowDst ? (-4 * 3600) : (-5 * 3600);
    datetime nowNY   = nowUTC + nowNyOffSec;
@@ -326,7 +331,7 @@ int ST_ServerOffsetForUtc(datetime utcInstant)
 //+------------------------------------------------------------------+
 void ST_ComputeSessionServerTime(int y, int m, int d,
                                  int nyStartH, int nyStartM, int nyEndH, int nyEndM,
-                                 datetime &outStart, datetime &outEnd)
+                                 datetime &outStart, datetime &outEnd, bool asUtc=false)
 {
    datetime nyMidnightRaw = StringToTime(StringFormat("%04d.%02d.%02d 00:00", y, m, d));
    bool dst = ST_IsUSDST(nyMidnightRaw + 12 * 3600);   // چک در «ظهرِ» همان روز - دور از لبه‌ی نیمه‌شب
@@ -341,8 +346,8 @@ void ST_ComputeSessionServerTime(int y, int m, int d,
    datetime utcEndRaw   = nyEndRaw   - nyOffsetSec;
 
    // v107 (FEAT-060): آفستِ سرور *per-day* (قاعده‌ی US-DST کالیبره با آفستِ زنده) - نه یک آفستِ تکِ «الان» برای همه‌ی روزها.
-   outStart = utcStartRaw + ST_ServerOffsetForUtc(utcStartRaw);
-   outEnd   = utcEndRaw   + ST_ServerOffsetForUtc(utcEndRaw);
+   outStart = utcStartRaw + (asUtc ? 0 : ST_ServerOffsetForUtc(utcStartRaw));
+   outEnd   = utcEndRaw + (asUtc ? 0 : ST_ServerOffsetForUtc(utcEndRaw));
 
    // v91: چاپ تشخیصی [ST-DIAG] box حذف شد (به‌خاطر static مشترک بین چند پنجره، تقریباً با هر محاسبه چاپ می‌کرد - ~۸۱ هزار خط در روز).
 }
@@ -354,11 +359,11 @@ void ST_ComputeSessionServerTime(int y, int m, int d,
 //+------------------------------------------------------------------+
 void ST_ComputeSessionByDaysAgo(int daysAgo,
                                 int nyStartH, int nyStartM, int nyEndH, int nyEndM,
-                                datetime &outStart, datetime &outEnd)
+                                datetime &outStart, datetime &outEnd, bool asUtc=false)
 {
    int y, m, d;
    ST_GetNYCalendarDate(daysAgo, y, m, d);
-   ST_ComputeSessionServerTime(y, m, d, nyStartH, nyStartM, nyEndH, nyEndM, outStart, outEnd);
+   ST_ComputeSessionServerTime(y, m, d, nyStartH, nyStartM, nyEndH, nyEndM, outStart, outEnd, asUtc);
 }
 
 //+------------------------------------------------------------------+
@@ -369,9 +374,9 @@ void ST_ComputeSessionByDaysAgo(int daysAgo,
 //+------------------------------------------------------------------+
 void ST_ComputeSessionServerTimeMkt(int market, int y, int m, int d,
                                     int sH, int sM, int eH, int eM,
-                                    datetime &outStart, datetime &outEnd)
+                                    datetime &outStart, datetime &outEnd, bool asUtc=false)
 {
-   if(market == ST_MKT_NY) { ST_ComputeSessionServerTime(y, m, d, sH, sM, eH, eM, outStart, outEnd); return; }
+   if(market == ST_MKT_NY) { ST_ComputeSessionServerTime(y, m, d, sH, sM, eH, eM, outStart, outEnd, asUtc); return; }
 
    datetime midRaw   = StringToTime(StringFormat("%04d.%02d.%02d 00:00", y, m, d));
    datetime startRaw = midRaw + sH * 3600 + sM * 60;
@@ -380,19 +385,19 @@ void ST_ComputeSessionServerTimeMkt(int market, int y, int m, int d,
 
    datetime utcStart = ST_MarketLocalToUtc(market, startRaw);
    datetime utcEnd   = ST_MarketLocalToUtc(market, endRaw);
-   outStart = utcStart + ST_ServerOffsetForUtc(utcStart);
-   outEnd   = utcEnd   + ST_ServerOffsetForUtc(utcEnd);
+   outStart = utcStart + (asUtc ? 0 : ST_ServerOffsetForUtc(utcStart));
+   outEnd   = utcEnd + (asUtc ? 0 : ST_ServerOffsetForUtc(utcEnd));
 }
 
 // daysAgo همان معنای قبلی را دارد (روزِ تقویمیِ نیویورک برای شمارنده‌ی روز؛ منفی = آینده)؛ تاریخِ همان روز
 // روی تقویمِ *بازارِ هدف* اعمال می‌شود (مثلاً توکیو 09:00-18:00 روی همان تاریخ = 00:00-09:00 UTC).
 void ST_ComputeSessionByDaysAgoMkt(int daysAgo, int market,
                                    int sH, int sM, int eH, int eM,
-                                   datetime &outStart, datetime &outEnd)
+                                   datetime &outStart, datetime &outEnd, bool asUtc=false)
 {
    int y, m, d;
    ST_GetNYCalendarDate(daysAgo, y, m, d);
-   ST_ComputeSessionServerTimeMkt(market, y, m, d, sH, sM, eH, eM, outStart, outEnd);
+   ST_ComputeSessionServerTimeMkt(market, y, m, d, sH, sM, eH, eM, outStart, outEnd, asUtc);
 }
 
 //+------------------------------------------------------------------+
