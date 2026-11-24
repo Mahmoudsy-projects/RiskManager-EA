@@ -1583,6 +1583,7 @@ void RM_OnTimerImpl()
 
    CheckButtonFlashExpiry();  // v30 (Button Click Feedback): همون تایمر ۱ ثانیه‌ای موجود، بدون تایمر دوم
 
+   UpdateKeyTimeWindow();
    RM_NewsTick();  // v105: خبرهای USD (throttle ۲۰ثانیه، فقط وقتی KEY TIME روشن است؛ دانلود ساعتی)
 
    CheckPanelIntegrity();  // v34 (BUG-033): همون تایمر ۱ ثانیه‌ای موجود، بدون تایمر دوم - نگاه کن به تعریف تابع برای جزئیات
@@ -2587,14 +2588,16 @@ void RM_OnChartEventImpl(const int id, const long &lp, const double &dp, const s
       // does its own no-op/cleanup when g_swOn is false, same idempotent shape as the other tools.
       if(sp == P+"BTN_SW")
       {
-         // v107 (FEAT-061): چرخه‌ی سه‌حالتی روی همان دکمه: OFF -> ON (FULL) -> COMPACT -> OFF. کلیکِ اول از OFF همان رفتارِ قبلی (FULL).
          if(!g_swOn)                               { g_swOn = true;  g_swMode = KEYTIME_MODE_FULL; }
          else if(g_swMode == KEYTIME_MODE_FULL)    { g_swMode = KEYTIME_MODE_COMPACT; }
+         else if(g_swMode == KEYTIME_MODE_COMPACT) { g_swMode = KEYTIME_MODE_WINDOW; }
          else                                      { g_swOn = false; g_swMode = KEYTIME_MODE_FULL; }
          SaveSessionWindowsState();
          BuildSessionWindows();  // ON: (re)builds today + history; OFF: BuildSessionWindows() calls RemoveSessionWindows() and returns
          UpdateSWButton();
-         SetStatus(g_swOn ? (g_swMode == KEYTIME_MODE_COMPACT ? "Key Time: ON (COMPACT)" : "Key Time: ON (FULL)") : "Key Time: OFF", C'150,160,180');  // v57.1: متن وضعیت هم‌راستا با کپشن جدید دکمه شد
+         string modeName = (g_swMode == KEYTIME_MODE_WINDOW) ? "WINDOW" :
+                           (g_swMode == KEYTIME_MODE_COMPACT) ? "COMPACT" : "FULL";
+         SetStatus(g_swOn ? "Key Time: ON (" + modeName + ")" : "Key Time: OFF", C'150,160,180');
       }
       // v57: Session Level toggle - همون الگوی click-toggle + GlobalVariable persistence که
       // Session Windows/Candle Timer/Daily H/L استفاده می‌کنن (یه display preference‌ه، نه یه

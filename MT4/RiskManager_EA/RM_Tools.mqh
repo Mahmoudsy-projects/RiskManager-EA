@@ -729,12 +729,17 @@ datetime g_swCullTime = 0;  // v95: مرز چپ برای ساخت خطوط Key T
 string   g_swBoxNames[];   // اسم قدیمی (v54) مونده - حالا اسم خط‌های عمودی (OBJ_VLINE) رو نگه می‌داره
 string   g_swLblNames[];
 int      g_swObjCount = 0;
-// v107 (FEAT-061): حالتِ نمایشِ KEY TIME - 0=FULL (هر ۱۶ خط، پیش‌فرض = رفتارِ قبلی)، 1=COMPACT (فقط خطوطِ اصلی، فرعی‌ها مخفی).
-// با همان دکمه‌ی KEY TIME چرخه می‌خورد: OFF -> FULL -> COMPACT -> OFF؛ در GlobalVariable ذخیره می‌شود (مثلِ g_swOn).
+// KEY TIME cycles OFF -> FULL -> COMPACT -> WINDOW -> OFF.
 #define  KEYTIME_MODE_FULL     0
 #define  KEYTIME_MODE_COMPACT  1
+#define  KEYTIME_MODE_WINDOW   2
 int      g_swMode = KEYTIME_MODE_FULL;
 string   GV_SW_MODE = "RM_SWMode_" + Symbol();
+datetime g_swWindowUtc[2];       // elapsed and upcoming, in that order
+datetime g_swWindowServer[2];
+int      g_swWindowLine[2];
+datetime g_swWindowLastCheck = 0;
+color    g_swWindowBackground;
 
 // FEAT-033 (v81) - جدول ثابت ۱۴ خط KEY TIME، همه به‌وقت نیویورک (طبق سند تسک). dayOffset=1 یعنی
 // این خط به روز تقویمی نیویورکِ *قبل* از daysAgo جاری تعلق داره (مثلاً سشن عصر که از شب قبل
@@ -879,6 +884,7 @@ void SessionLevel_EnsureChartShift(datetime latestObjTime)
 
 void RemoveSessionWindows()
 {
+   g_swWindowUtc[1] = 0;
    RM_NewsRemove();  // v105
    for(int i=0; i<g_swObjCount; i++)
    {
@@ -890,36 +896,20 @@ void RemoveSessionWindows()
    ArrayResize(g_swLblNames, 0);
 }
 
-// FEAT-033 (v81): یه خط عمودی سراسری (OBJ_VLINE، خط‌چین) + لیبل ساعتش زیرش می‌سازه (یا اگه از
-// قبل وجود داره، آپدیت می‌کنه) و به آرایه‌ی ردیابی اضافه می‌کنه. ذخیره‌سازی داخلی بر پایه‌ی وقت
-// نیویورک (h,m) - از همون ماژول مشترک RM_SessionTime.mqh (ST_ComputeSessionByDaysAgo) برای
-// تبدیل به وقت سرور استفاده می‌شه؛ چون این تابع یه بازه (start,end) می‌خواد نه یه لحظه‌ی تکی، همون
-// h,m برای هر دو پاس داده می‌شه و فقط outStart استفاده می‌شه (outEnd به‌خاطر منطق «رد از نیمه‌شب»
-// همون تابع ممکنه یه روز جلوتر بره - این‌جا بی‌ربطه، نادیده گرفته می‌شه).
-// لیبل نمایشی (برچسب زیر خط) همیشه به‌وقت بروکر است - همون outStart (که از قبل به وقت سرور/
-// بروکر تبدیل شده) مستقیم با TimeHour/TimeMinute خونده می‌شه؛ پس اگه DST نیویورک عوض بشه، دفعه‌ی
-// بعد که این تابع صدا زده بشه (day-reset/toggle/OnInit - همون‌جاهایی که BuildSessionWindows از
-// قبل صدا زده می‌شه) لیبل خودش با مقدار درست بازسازی می‌شه - بدون دیسپچ جدید.
-void BuildOneKeyTimeLine(int daysAgo, int lineIdx, int nyH, int nyM, bool isMain, color c, int mkt = ST_MKT_NY, int dayOffset = 0)
+// Use the start of the existing market-local session calculation for each line.
+datetime KeyTime_CalculateTime(int daysAgo, int h, int m, int mkt, int dayOffset, bool asUtc=false)
 {
-   // v107 (FEAT-060): nyH/nyM = ساعتِ *محلیِ بازارِ mkt* (نامِ پارامتر برای سازگاری مانده). NY = مسیرِ قدیمی؛ بقیه market-aware.
    datetime t1, t2dummy;
    if(mkt == ST_MKT_NY)
-      ST_ComputeSessionByDaysAgo(daysAgo, nyH, nyM, nyH, nyM, t1, t2dummy);
+      ST_ComputeSessionByDaysAgo(daysAgo, h, m, h, m, t1, t2dummy, asUtc);
    else
-      ST_ComputeSessionByDaysAgoMkt(daysAgo - dayOffset, mkt, nyH, nyM, nyH, nyM, t1, t2dummy);
-   // v95 (BUG-059): خطوطِ کاملاً بیرون از (چپِ) ناحیه‌ی دیده‌شده‌ی چارت ساخته نمی‌شن - قبلاً همیشه
-   // ~۴۵۰ خط + ~۴۵۰ لیبل (۳۲ روز × ۱۴) ساخته می‌شد و هر ChartRedraw رو تا ~۱ ثانیه کند می‌کرد.
-   // اسکرول به عقب CHARTEVENT_CHART_CHANGE می‌ده که همین تابع رو دوباره صدا می‌زنه، پس خطوط قدیمی‌تر
-   // موقع اسکرول کشیده می‌شن.
-   if(g_swCullTime > 0 && t1 < g_swCullTime) return;
-   // BUG-046 fix (v59) - همون فضای رزرو سمت راست چارت، برای خط‌های امروز/فردا که هنوز کندل واقعی ندارن
+      ST_ComputeSessionByDaysAgoMkt(daysAgo - dayOffset, mkt, h, m, h, m, t1, t2dummy, asUtc);
+   return t1;
+}
+
+void DrawKeyTimeLine(string lineName, string lblName, datetime t1, bool isMain, color c)
+{
    SessionLevel_EnsureChartShift(t1);
-
-   string id      = KeyTime_Id(lineIdx);
-   string lineName = SW_BOX_PREFIX + id + "_" + IntegerToString(daysAgo);
-   string lblName  = SW_LBL_PREFIX + id + "_" + IntegerToString(daysAgo);
-
    double priceTop, priceBot;
    GetSessionWindowPriceRange(priceTop, priceBot);  // priceTop همون لنگر نزدیک-پایین‌چارت قبلی (v54) - برای لیبل زیر خط استفاده می‌شه
 
@@ -948,6 +938,17 @@ void BuildOneKeyTimeLine(int daysAgo, int lineIdx, int nyH, int nyM, bool isMain
    ObjectSetInteger(0,lblName,OBJPROP_ANCHOR, ANCHOR_LOWER);
    ObjectSetInteger(0,lblName,OBJPROP_SELECTABLE, false);
    ObjectSetInteger(0,lblName,OBJPROP_BACK,   false);
+}
+
+void BuildOneKeyTimeLine(int daysAgo, int lineIdx, int nyH, int nyM, bool isMain, color c, int mkt = ST_MKT_NY, int dayOffset = 0)
+{
+   datetime t1 = KeyTime_CalculateTime(daysAgo, nyH, nyM, mkt, dayOffset);
+   if(g_swCullTime > 0 && t1 < g_swCullTime) return;
+
+   string id = KeyTime_Id(lineIdx) + "_" + IntegerToString(daysAgo);
+   string lineName = SW_BOX_PREFIX + id;
+   string lblName = SW_LBL_PREFIX + id;
+   DrawKeyTimeLine(lineName, lblName, t1, isMain, c);
 
    ArrayResize(g_swBoxNames, g_swObjCount+1);
    ArrayResize(g_swLblNames, g_swObjCount+1);
@@ -956,11 +957,103 @@ void BuildOneKeyTimeLine(int daysAgo, int lineIdx, int nyH, int nyM, bool isMain
    g_swObjCount++;
 }
 
-// (دوباره‌)می‌سازه هر ۱۴ خط/لیبل - امروز به‌علاوه‌ی ~SW_HISTORY_DAYS روز تاریخچه (دست‌نخورده از
-// v54 - همون حلقه‌ی daysAgo=-1..SW_HISTORY_DAYS و همون نقاط صدازده‌شدن: توگل روشن شدن، OnInit()
-// اگه از ری‌استارت قبلی روشن بوده، و یه‌بار در هر day-reset).
+// Compare UTC instants so a broker clock change cannot reverse their order.
+void UpdateKeyTimeWindow(bool refresh=false)
+{
+   if(!g_swOn || g_swMode != KEYTIME_MODE_WINDOW) return;
+
+   datetime now = ST_NowUTC();
+   bool select = g_swWindowUtc[1] == 0 || now >= g_swWindowUtc[1] || now < g_swWindowLastCheck;
+   // Check the broker-time mapping once per minute, or on a chart refresh.
+   if(!select && !refresh && now / 60 == g_swWindowLastCheck / 60) return;
+   g_swWindowLastCheck = now;
+
+   datetime utc[2] = {0, 0};
+   int line[2] = {0, 0};
+   if(select)
+   {
+      // Market-local dates can fall on either side of the NY calendar date.
+      // At coincident times, use the first line in the existing schedule (main first).
+      for(int daysAgo=-2; daysAgo<=2; daysAgo++)
+      {
+         for(int i=0; i<KEYTIME_LINE_COUNT; i++)
+         {
+            int h, m, dayOffset, mkt; bool isMain;
+            KeyTime_GetLine(i, h, m, isMain, dayOffset, mkt);
+            datetime candidate = KeyTime_CalculateTime(daysAgo+dayOffset, h, m, mkt, dayOffset, true);
+            int side = (candidate <= now) ? 0 : 1;
+            if(utc[side] == 0 || (side == 0 && candidate > utc[side]) ||
+               (side == 1 && candidate < utc[side]) ||
+               (candidate == utc[side] && i < line[side]))
+            {
+               utc[side] = candidate;
+               line[side] = i;
+            }
+         }
+      }
+      if(utc[0] == 0 || utc[1] == 0) return;
+   }
+   else
+   {
+      ArrayCopy(utc, g_swWindowUtc);
+      ArrayCopy(line, g_swWindowLine);
+   }
+
+   color background = (color)ChartGetInteger(0, CHART_COLOR_BACKGROUND);
+   bool changed = false;
+   for(int i=0; i<g_swObjCount; i++)
+   {
+      if((g_swWindowUtc[i] == utc[0] && g_swWindowLine[i] == line[0]) ||
+         (g_swWindowUtc[i] == utc[1] && g_swWindowLine[i] == line[1])) continue;
+      ObjectDelete(0, g_swBoxNames[i]);
+      ObjectDelete(0, g_swLblNames[i]);
+      changed = true;
+   }
+
+   ArrayResize(g_swBoxNames, 2);
+   ArrayResize(g_swLblNames, 2);
+   datetime server[2];
+   for(int i=0; i<2; i++)
+   {
+      server[i] = utc[i] + ST_ServerOffsetForUtc(utc[i]);
+      int existing = -1;
+      for(int j=0; j<g_swObjCount; j++)
+      {
+         if(g_swWindowUtc[j] == utc[i] && g_swWindowLine[j] == line[i]) existing = j;
+      }
+      string id = KeyTime_Id(line[i]) + "_W_" + IntegerToString(utc[i]);
+      g_swBoxNames[i] = SW_BOX_PREFIX + id;
+      g_swLblNames[i] = SW_LBL_PREFIX + id;
+      if(existing >= 0 && server[i] == g_swWindowServer[existing] && background == g_swWindowBackground &&
+         (!refresh || (ObjectFind(0, g_swBoxNames[i]) >= 0 && ObjectFind(0, g_swLblNames[i]) >= 0))) continue;
+
+      int h, m, dayOffset, mkt; bool isMain;
+      KeyTime_GetLine(line[i], h, m, isMain, dayOffset, mkt);
+      DrawKeyTimeLine(g_swBoxNames[i], g_swLblNames[i], server[i], isMain, GetKeyTimeLineColor(isMain));
+      changed = true;
+   }
+   ArrayCopy(g_swWindowUtc, utc);
+   ArrayCopy(g_swWindowLine, line);
+   ArrayCopy(g_swWindowServer, server);
+   g_swObjCount = 2;
+   g_swWindowBackground = background;
+   if(refresh) SessionLevel_EnsureChartShift(server[1]);
+   else if(changed) ChartRedraw();
+}
+
 void BuildSessionWindows()
 {
+   if(g_swOn && g_swMode == KEYTIME_MODE_WINDOW)
+   {
+      if(g_swWindowUtc[1] == 0) RemoveSessionWindows();
+      g_swCullTime = 0;
+      UpdateKeyTimeWindow(true);
+      RM_NewsBuild();
+      UpdateSessionWindowsVertical(true);
+      ChartRedraw();
+      return;
+   }
+
    RemoveSessionWindows();
    if(!g_swOn) return;
 
@@ -1041,10 +1134,14 @@ void SaveSessionWindowsState()
 
 void LoadSessionWindowsState()
 {
+   // Clear Key Time objects left on the chart after an unclean shutdown.
+   ObjectsDeleteAll(0, SW_BOX_PREFIX);
+   ObjectsDeleteAll(0, SW_LBL_PREFIX);
    if(GlobalVariableCheck(GV_SW_ON))
       g_swOn = (GlobalVariableGet(GV_SW_ON) != 0.0);
    // v107 (FEAT-061): نبودنِ GV (کاربرِ قدیمی) = FULL = رفتارِ قبلی
-   g_swMode = (GlobalVariableCheck(GV_SW_MODE) && (int)GlobalVariableGet(GV_SW_MODE) == KEYTIME_MODE_COMPACT) ? KEYTIME_MODE_COMPACT : KEYTIME_MODE_FULL;
+   int savedMode = GlobalVariableCheck(GV_SW_MODE) ? (int)GlobalVariableGet(GV_SW_MODE) : KEYTIME_MODE_FULL;
+   g_swMode = (savedMode == KEYTIME_MODE_COMPACT || savedMode == KEYTIME_MODE_WINDOW) ? savedMode : KEYTIME_MODE_FULL;
 }
 
 //+------------------------------------------------------------------+
